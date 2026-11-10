@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Ranking · Doutor vs Sarampo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<style>
+/* Telão do estande: placar de líderes à esquerda, salas à direita, últimas partidas embaixo */
+:root {
+  --bg: #08161b;
+  --screen: #0d2329;
+  --grid: #14353d;
+  --mint: #5ef2c0;
+  --virus: #ff4d5e;
+  --gold: #ffd166;
+  --silver: #d8e3e0;
+  --bronze: #e09a62;
+  --ink: #e8fbf5;
+  --muted: #8fb8ad;
+  --display: "Press Start 2P", ui-monospace, monospace;
+  --body: "VT323", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 22px;
+  padding: 18px max(16px, 2vw); display: flex; flex-direction: column; gap: 16px;
+}
+button { font-family: var(--display); cursor: pointer; }
+button:focus-visible, select:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+[hidden] { display: none !important; }
+
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; flex-direction: column; gap: 8px; }
+.brand .kicker { font-family: var(--display); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
+.brand h1 { font-family: var(--display); font-size: clamp(18px, 2.6vw, 34px); margin: 0; line-height: 1.3; }
+.brand h1 .g { color: var(--mint); } .brand h1 .r { color: var(--virus); } .brand h1 .v { color: var(--muted); font-size: 0.55em; margin: 0 8px; }
+.stats { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-end; }
+.stat { display: flex; flex-direction: column; gap: 6px; }
+.stat b { font-family: var(--display); font-size: clamp(16px, 2vw, 26px); color: var(--gold); font-weight: normal; font-variant-numeric: tabular-nums; }
+.stat span { font-family: var(--display); font-size: 9px; color: var(--muted); letter-spacing: 0.06em; }
+.live { font-size: 20px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.live::before { content: ""; width: 10px; height: 10px; background: var(--muted); }
+.live.on::before { background: var(--mint); animation: pulse 1.4s steps(2) infinite; }
+.live.off::before { background: var(--virus); }
+@keyframes pulse { 50% { opacity: 0.3; } }
+.tools { display: flex; gap: 8px; align-items: center; }
+.ghost { font-size: 10px; color: var(--ink); background: transparent; border: 2px solid var(--grid); padding: 9px 11px; }
+.ghost:hover { border-color: var(--muted); }
+
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } body { height: auto; } }
+.panel { background: var(--screen); border: 3px solid var(--grid); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-height: 0; min-width: 0; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.panel h2 { font-family: var(--display); font-size: clamp(13px, 1.4vw, 18px); margin: 0; color: var(--gold); }
+.panel select { font-family: var(--body); font-size: 20px; background: var(--bg); color: var(--ink); border: 2px solid var(--grid); padding: 2px 8px; }
+.scroll { flex: 1; overflow: auto; min-height: 0; }
+.note { margin: 0; font-size: 18px; color: var(--muted); line-height: 1.15; }
+
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { font-family: var(--display); font-size: 9px; color: var(--muted); text-align: left; font-weight: normal; padding: 8px 6px; border-bottom: 2px solid var(--grid); position: sticky; top: 0; background: var(--screen); letter-spacing: 0.04em; }
+td { padding: 7px 6px; border-bottom: 1px solid var(--grid); vertical-align: middle; font-size: clamp(20px, 1.7vw, 28px); }
+td.num, th.num { text-align: right; white-space: nowrap; }
+td.pos { font-family: var(--display); font-size: clamp(11px, 1.1vw, 15px); color: var(--muted); width: 3em; }
+tr.p1 td.pos { color: var(--gold); } tr.p2 td.pos { color: var(--silver); } tr.p3 td.pos { color: var(--bronze); }
+tr.p1 td { font-size: clamp(24px, 2.2vw, 36px); }
+td .sub { display: block; font-size: 0.7em; color: var(--muted); line-height: 1; }
+td.name { word-break: break-word; }
+.red { color: var(--virus); }
+td .sub.red { color: var(--virus); }
+.bar { height: 6px; background: var(--grid); margin-top: 4px; }
+.bar i { display: block; height: 100%; background: var(--mint); }
+tr.out .bar i { background: var(--virus); opacity: 0.6; }
+tr.flash td { animation: flash 2.4s ease-out; }
+@keyframes flash { 0% { background: rgba(255, 209, 102, 0.35); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { tr.flash td, .live.on::before { animation: none; } }
+.empty { color: var(--muted); text-align: center; padding: 30px 10px; font-size: 24px; }
+
+footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.ticker { display: flex; gap: 22px; overflow: hidden; white-space: nowrap; font-size: 22px; color: var(--muted); min-width: 0; flex: 1; }
+.ticker b { color: var(--ink); font-weight: normal; }
+.ticker em { color: var(--gold); font-style: normal; }
+.cta { font-family: var(--display); font-size: clamp(10px, 1vw, 14px); color: var(--mint); }
+
+.gate { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 20px; z-index: 10; }
+.gate .box { max-width: 460px; display: flex; flex-direction: column; gap: 16px; text-align: center; align-items: center; }
+.gate h2 { font-family: var(--display); font-size: 18px; margin: 0; color: var(--gold); line-height: 1.5; }
+.gate p { margin: 0; color: var(--muted); font-size: 22px; line-height: 1.2; }
+.primary { font-size: 13px; background: var(--mint); color: var(--bg); border: 0; padding: 14px 18px; box-shadow: 4px 4px 0 #2a8f72; }
+.primary:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #2a8f72; }
+.err { color: var(--virus) !important; }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="box">
+    <h2>RANKING DO ESTANDE</h2>
+    <p id="gateMsg">Esta página é só para a equipe. Entre com a conta Google do organizador para ver o ranking.</p>
+    <button class="primary" id="btnLogin" type="button">ENTRAR COM GOOGLE</button>
+    <button class="ghost" id="btnOther" type="button" hidden>SAIR E TROCAR DE CONTA</button>
+  </div>
+</div>
+
+<header>
+  <div class="brand">
+    <span class="kicker">RANKING AO VIVO</span>
+    <h1><span class="g">DOUTOR</span><span class="v">vs</span><span class="r">SARAMPO</span></h1>
+  </div>
+  <div class="stats">
+    <div class="stat"><b id="sPartidas">0</b><span>PARTIDAS</span></div>
+    <div class="stat"><b id="sAlunos">0</b><span>JOGADORES</span></div>
+    <div class="stat"><b id="sTurmas">0</b><span>TURMAS</span></div>
+    <span class="live" id="live">conectando…</span>
+  </div>
+  <div class="tools">
+    <button class="ghost" id="btnFull" type="button">TELA CHEIA</button>
+    <button class="ghost" id="btnLogout" type="button">SAIR</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel" aria-label="Líderes">
+    <div class="panel-head">
+      <h2>LÍDERES</h2>
+      <label>Turma: <select id="fTurma"><option value="">Todas (top 15)</option></select></label>
+    </div>
+    <div class="scroll" id="leaders"><div class="empty">Carregando…</div></div>
+    <p class="note">Vale o melhor resultado de cada aluno.</p>
+  </section>
+  <section class="panel" aria-label="Salas">
+    <div class="panel-head"><h2>SALAS</h2></div>
+    <div class="scroll" id="rooms"><div class="empty">Carregando…</div></div>
+    <p class="note" id="roomsNote"></p>
+  </section>
+</main>
+
+<footer>
+  <div class="ticker" id="ticker"></div>
+  <span class="cta">JOGUE: DOUTORVSSARAMPO.GITHUB.IO</span>
+</footer>
+
+<script>
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyByo0qNstJfIZUW0wCP7zW462p0fDDtD2w",
+  authDomain: "doutor-vs-sarampo.firebaseapp.com",
+  projectId: "doutor-vs-sarampo",
+  storageBucket: "doutor-vs-sarampo.firebasestorage.app",
+  messagingSenderId: "838102277369",
+  appId: "1:838102277369:web:c8cff086c6cf341c101628"
+};
+</script>
+<script>
+(async () => {
+  const OWNER = 'tailonsilper@gmail.com';
+  const MIN_ALUNOS = 8;
+  const TOP = 15;
+  const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
+  const TURMAS = [['1º ano', 'ABCDEFGHI'], ['2º ano', 'ABCDEF'], ['3º ano', 'ABCD'], ['4º ano', 'ABC'], ['5º ano', 'ABC']];
+  const ALL_TURMAS = TURMAS.flatMap(([ano, l]) => [...l].map(x => `${ano[0]}º ${x}`)).concat('PROFESSORES');
+  const label = t => t === 'PROFESSORES' ? 'Professores' : t;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = n => Number(n || 0).toLocaleString('pt-BR');
+  const ms = t => (t && typeof t.toMillis === 'function') ? t.toMillis() : Date.now();
+
+  $('fTurma').innerHTML += ALL_TURMAS.map(t => `<option value="${esc(t)}">${esc(label(t))}</option>`).join('');
+
+  const appMod = await import(FB + 'firebase-app.js');
+  const authMod = await import(FB + 'firebase-auth.js');
+  const fs = await import(FB + 'firebase-firestore.js');
+  const app = appMod.initializeApp(window.FIREBASE_CONFIG);
+  const auth = authMod.getAuth(app);
+  let db;
+  try { db = fs.initializeFirestore(app, { localCache: fs.persistentLocalCache() }); }
+  catch (e) { db = fs.getFirestore(app); }
+
+  let unsub = null, first = true;
+  const partidas = new Map();   // id -> data
+  const recent = [];            // últimas partidas (ticker)
+  const flashIds = new Set();
+
+  $('btnLogin').addEventListener('click', async () => {
+    $('gateMsg').classList.remove('err');
+    try { await authMod.signInWithPopup(auth, new authMod.GoogleAuthProvider()); }
+    catch (e) { $('gateMsg').textContent = 'Não deu para entrar (' + (e.code || 'erro') + '). Tente de novo.'; $('gateMsg').classList.add('err'); }
+  });
+  const logout = () => authMod.signOut(auth);
+  $('btnLogout').addEventListener('click', logout);
+  $('btnOther').addEventListener('click', logout);
+  $('btnFull').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else document.documentElement.requestFullscreen().catch(() => {});
+  });
+
+  authMod.onAuthStateChanged(auth, user => {
+    if (unsub) { unsub(); unsub = null; }
+    const ok = user && user.email === OWNER && user.emailVerified;
+    $('gate').hidden = !!ok;
+    $('btnLogin').hidden = !!user;
+    $('btnOther').hidden = !user || ok;
+    if (user && !ok) {
+      $('gateMsg').textContent = `A conta ${user.email} não tem acesso ao ranking. Entre com a conta do organizador.`;
+      $('gateMsg').classList.add('err');
+    }
+    if (!ok) return;
+    partidas.clear(); recent.length = 0; first = true;
+    setLive('loading');
+    const timer = setTimeout(() => setLive('slow'), 10000);
+    unsub = fs.onSnapshot(fs.collection(db, 'partidas'), { includeMetadataChanges: true }, snap => {
+      snap.docChanges().forEach(ch => {
+        if (ch.type === 'removed') { partidas.delete(ch.doc.id); return; }
+        const d = ch.doc.data({ serverTimestamps: 'estimate' });
+        partidas.set(ch.doc.id, d);
+        if (!first && ch.type === 'added') { recent.unshift(d); flashIds.add(d.aluno); }
+      });
+      if (first) {
+        [...partidas.values()].sort((a, b) => ms(b.criado) - ms(a.criado)).slice(0, 8).forEach(d => recent.push(d));
+      }
+      recent.splice(8);
+      if (!snap.metadata.fromCache) { clearTimeout(timer); setLive('live'); }
+      first = false;
+      render();
+      setTimeout(() => flashIds.clear(), 2500);
+    }, err => { clearTimeout(timer); setLive('error'); });
+  });
+
+  function setLive(m) {
+    const el = $('live');
+    el.className = 'live' + (m === 'live' ? ' on' : (m === 'error' || m === 'slow') ? ' off' : '');
+    el.textContent = { loading: 'conectando…', live: 'ao vivo', slow: 'sem conexão', error: 'desconectado' }[m];
+  }
+
+  function compute() {
+    const alunos = new Map();
+    [...partidas.values()].sort((a, b) => ms(a.criado) - ms(b.criado)).forEach(p => {
+      let a = alunos.get(p.aluno);
+      if (!a) { a = { id: p.aluno, nome: p.nome, turma: p.turma, melhor: -1, fase: 1, partidas: 0, bestAt: 0 }; alunos.set(p.aluno, a); }
+      a.partidas++;
+      if (p.pontos > a.melhor) { a.melhor = p.pontos; a.fase = p.fase; a.bestAt = ms(p.criado); }
+    });
+    const lista = [...alunos.values()].sort((a, b) => b.melhor - a.melhor || a.bestAt - b.bestAt);
+    const salas = new Map();
+    lista.forEach(a => {
+      const s = salas.get(a.turma) || { turma: a.turma, total: 0, n: 0, top: null };
+      s.total += a.melhor; s.n++; if (!s.top) s.top = a;
+      salas.set(a.turma, s);
+    });
+    const turmas = [...salas.values()].map(s => Object.assign(s, { media: Math.round(s.total / s.n), valida: s.n >= MIN_ALUNOS }))
+      .sort((a, b) => (b.valida - a.valida) || b.media - a.media || b.n - a.n);
+    return { lista, turmas };
+  }
+
+  $('fTurma').addEventListener('change', render);
+
+  function render() {
+    const { lista, turmas } = compute();
+    $('sPartidas').textContent = fmt(partidas.size);
+    $('sAlunos').textContent = fmt(lista.length);
+    $('sTurmas').textContent = fmt(turmas.length);
+
+    const f = $('fTurma').value;
+    const ranked = lista.map((a, i) => Object.assign({ pos: i + 1 }, a));
+    const shown = f ? ranked.filter(a => a.turma === f) : ranked.slice(0, TOP);
+    $('leaders').innerHTML = !shown.length
+      ? `<div class="empty">${f ? 'Ninguém dessa turma jogou ainda.' : 'Ninguém jogou ainda. Escaneie o QR Code e seja o primeiro!'}</div>`
+      : `<table><thead><tr><th>#</th><th>JOGADOR</th><th class="num">PONTOS</th></tr></thead><tbody>` +
+        shown.map(a => `<tr class="${a.pos <= 3 ? 'p' + a.pos : ''} ${flashIds.has(a.id) ? 'flash' : ''}">
+          <td class="pos">${a.pos}º</td>
+          <td class="name">${esc(a.nome)}<span class="sub">${esc(label(a.turma))}</span></td>
+          <td class="num">${fmt(a.melhor)}<span class="sub">fase ${esc(a.fase)} · ${esc(a.partidas)}x</span></td>
+        </tr>`).join('') + '</tbody></table>';
+
+    const maxMedia = Math.max(1, ...turmas.map(t => t.media));
+    let pos = 0;
+    $('rooms').innerHTML = !turmas.length
+      ? '<div class="empty">Nenhuma sala jogou ainda.</div>'
+      : `<table><thead><tr><th>#</th><th>SALA</th><th class="num">MÉDIA</th><th class="num">ALUNOS</th></tr></thead><tbody>` +
+        turmas.map(t => {
+          const p = t.valida ? ++pos : null;
+          const falta = MIN_ALUNOS - t.n;
+          return `<tr class="${p && p <= 3 ? 'p' + p : ''} ${t.valida ? '' : 'out'}">
+            <td class="pos">${p ? p + 'º' : '—'}</td>
+            <td class="name"><span class="${t.valida ? '' : 'red'}">${esc(label(t.turma))}</span>
+              ${t.valida ? `<span class="sub">destaque: ${esc(t.top.nome)} · ${fmt(t.top.melhor)}</span>` : `<span class="sub red">faltam ${falta} aluno${falta > 1 ? 's' : ''} para concorrer</span>`}
+              <div class="bar"><i style="width:${Math.round(t.media / maxMedia * 100)}%"></i></div></td>
+            <td class="num">${fmt(t.media)}</td>
+            <td class="num">${t.n}</td>
+          </tr>`;
+        }).join('') + '</tbody></table>';
+    $('roomsNote').textContent = `Média = soma dos recordes dos alunos ÷ número de alunos que jogaram. Só concorre a sala com pelo menos ${MIN_ALUNOS} alunos; as outras aparecem em vermelho.`;
+
+    $('ticker').innerHTML = recent.length
+      ? 'ÚLTIMAS: ' + recent.map(r => `<span><b>${esc(r.nome)}</b> (${esc(label(r.turma))}) <em>${fmt(r.pontos)}</em></span>`).join('')
+      : '';
+  }
+})();
+</script>
+</body>
+</html>
