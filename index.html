@@ -81,6 +81,7 @@ form.player input, form.player select {
 }
 form.player select:focus, form.player input:focus { outline: none; border-color: var(--mint); }
 form.player select[aria-invalid="true"], form.player input[aria-invalid="true"] { border-color: var(--virus); }
+.privacy-note { margin: 0 !important; font-size: 17px !important; color: var(--muted); }
 .form-error { color: var(--virus) !important; min-height: 1em; font-size: 19px !important; }
 
 button { font-family: var(--display); cursor: pointer; }
@@ -175,8 +176,6 @@ window.FIREBASE_CONFIG = {
   appId: "1:838102277369:web:c8cff086c6cf341c101628"
 };
 </script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>body{margin:0;font-size:14px}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}</style>
 </head>
 <body>
@@ -193,11 +192,11 @@ window.FIREBASE_CONFIG = {
     <p>Destrua os vírus com remédio antes que eles cheguem à cidade.</p>
     <form class="player" id="playerForm" novalidate>
       <label for="fNome"><span class="small-label">NOME</span>
-        <input id="fNome" name="nome" maxlength="40" autocomplete="off" placeholder="Seu nome">
+        <input id="fNome" name="nome" maxlength="60" autocomplete="off" placeholder="Nome e sobrenome">
       </label>
       <div class="row">
         <label for="fRa"><span class="small-label">RA</span>
-          <input id="fRa" name="ra" maxlength="20" autocomplete="off" inputmode="numeric" placeholder="Ex.: 202512">
+          <input id="fRa" name="ra" type="password" maxlength="20" autocomplete="off" inputmode="numeric" placeholder="Seu RA">
         </label>
         <label for="fTurma"><span class="small-label">TURMA</span>
           <select id="fTurma" name="turma"><option value="">Escolha…</option></select>
@@ -205,6 +204,7 @@ window.FIREBASE_CONFIG = {
       </div>
       <datalist id="turmasList"></datalist>
       <p class="form-error" id="formError" role="alert"></p>
+      <p class="privacy-note">No ranking aparece só o primeiro nome e a inicial (ex.: Ana S.). O RA não aparece.</p>
     </form>
     <div class="seg" role="group" aria-label="Escolha o visual">
       <span class="small-label">VISUAL</span>
@@ -283,194 +283,257 @@ window.FIREBASE_CONFIG = {
   window.addEventListener('resize', resize);
 
   // =========================================================
-  // RANKING COMPARTILHADO
+  // RANKING COMPARTILHADO (Firebase, com privacidade)
+  // - O RA nunca sai do aparelho: vira um código embaralhado (SHA-256).
+  // - No ranking aparece só "Primeiro nome + inicial".
+  // - Nada do jogador fica salvo no navegador (aparelho compartilhado na feira).
   // =========================================================
-  let db = null, me = null, canAdmin = false;
-  let players = [];           // [{id, nome, ra, turma, melhor, fase, partidas, atualizado}]
+  const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
+  let fs = null, db = null, canAdmin = false;
+  let players = [];           // top do ranking individual: [{id, nome, turma, melhor, fase, partidas, atualizado}]
+  let turmaList = null;       // resultado do filtro por turma
+  let turmaAgg = [];          // [{turma, total, jogadores}]
+  let aggAt = 0, aggBusy = false;
   let dbMode = 'loading';     // loading | live | slow | local | error
   let tab = 'ind';
-  let profile = null;         // {id, nome, ra, turma}
-  const LOCAL_KEY = 'dvs-ranking-local';
-  const MIN_ALUNOS = 8; // mínimo de alunos para a turma concorrer
+  let profile = null;         // {id, nome, turma}
+  const TOP_N = 50;
+  const MIN_ALUNOS = 8;       // mínimo de alunos para a turma concorrer
+  const LOCAL_KEY = 'dvs-ranking-local-v2';
+  const TURMAS = [['1º ano', 'ABCDEFGHI'], ['2º ano', 'ABCDEF'], ['3º ano', 'ABCD'], ['4º ano', 'ABC'], ['5º ano', 'ABC']];
+  const ALL_TURMAS = TURMAS.flatMap(([ano, letras]) => [...letras].map(l => `${ano[0]}º ${l}`)).concat('PROFESSORES');
+  const turmaLabel = t => t === 'PROFESSORES' ? 'Professores' : t;
 
+  try { localStorage.removeItem('dvs-jogador'); localStorage.removeItem('dvs-ranking-local'); } catch (e) {}
   const loadLocal = () => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]'); } catch (e) { return []; } };
   const saveLocal = list => { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); } catch (e) {} };
+  const tsMs = t => (t && typeof t.toMillis === 'function') ? t.toMillis() : (typeof t === 'string' ? Date.parse(t) || 0 : 0);
 
-  const normTurma = t => t.trim().toUpperCase().replace(/\s+/g, ' ');
-  const raId = ra => ra.trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+  // ---------- Privacidade: RA embaralhado e nome curto ----------
+  async function raToId(ra) {
+    const clean = ra.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const bytes = new TextEncoder().encode('doutor-vs-sarampo:' + clean);
+    const hash = await crypto.subtle.digest('SHA-256', bytes);
+    return 'a' + [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
+  }
+  const cap = w => w.charAt(0).toLocaleUpperCase('pt-BR') + w.slice(1).toLocaleLowerCase('pt-BR');
+  function shortName(full) {
+    const words = full.normalize('NFC').replace(/[^\p{L}' -]/gu, ' ').trim().split(/\s+/).map(w => w.replace(/^['-]+|['-]+$/g, '')).filter(Boolean);
+    if (!words.length) return '';
+    const first = cap(words[0]).slice(0, 20);
+    const ini = words.length > 1 ? (words[words.length - 1].match(/\p{L}/u) || [''])[0] : '';
+    const last = ini ? ' ' + ini.toLocaleUpperCase('pt-BR') + '.' : '';
+    return first + last;
+  }
 
-  function connect() {
+  // ---------- Filtro de palavrões ----------
+  const BAD_SUB = ['porra', 'caralh', 'buceta', 'boceta', 'puta', 'merda', 'foda', 'fuder', 'foder', 'cacete', 'viado', 'arrombad',
+    'piroca', 'bosta', 'otari', 'babaca', 'vagabund', 'vadia', 'retardad', 'desgraca', 'cuzao', 'hitler', 'nazis', 'xoxota', 'punheta',
+    'siririca', 'safad', 'piranha', 'corno', 'escrot', 'imbecil', 'idiota', 'macaco', 'prostitut', 'pênis', 'penis', 'vagina'];
+  const BAD_WORD = ['cu', 'cus', 'kct', 'fdp', 'pqp', 'vsf', 'tnc', 'krl', 'crl', 'prr', 'pau', 'rola', 'bct', 'vtnc', 'sexo'];
+  function hasBadWord(text) {
+    const n = text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/0/g, 'o').replace(/1/g, 'i').replace(/3/g, 'e').replace(/4/g, 'a').replace(/5/g, 's').replace(/7/g, 't').replace(/@/g, 'a').replace(/\$/g, 's');
+    const squeezed = n.replace(/[^a-z]/g, '');
+    if (BAD_SUB.some(w => squeezed.includes(w.normalize('NFD').replace(/[̀-ͯ]/g, '')))) return true;
+    const words = n.split(/[^a-z]+/).filter(Boolean);
+    return words.some(w => BAD_WORD.includes(w));
+  }
+
+  // ---------- Conexão ----------
+  async function connect() {
     const timer = setTimeout(() => { if (dbMode === 'loading') { dbMode = 'slow'; renderBoard(); } }, 10000);
     const cfg = window.FIREBASE_CONFIG || {};
     const goLocal = () => { clearTimeout(timer); db = null; dbMode = 'local'; players = loadLocal(); renderBoard(); };
-    if (!window.firebase || !cfg.apiKey || /COLE/.test(cfg.apiKey)) { goLocal(); return; }
-    try { firebase.initializeApp(cfg); db = firebase.firestore(); } catch (e) { goLocal(); return; }
-    db.collection('jogadores').orderBy('melhor', 'desc').limit(1000).onSnapshot({ includeMetadataChanges: true }, snap => {
-      players = snap.docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
+    if (!cfg.apiKey || /COLE/.test(cfg.apiKey)) { goLocal(); return; }
+    try {
+      const appMod = await import(FB + 'firebase-app.js');
+      fs = await import(FB + 'firebase-firestore.js');
+      db = fs.getFirestore(appMod.initializeApp(cfg));
+    } catch (e) { goLocal(); return; }
+    const q = fs.query(fs.collection(db, 'jogadores'), fs.orderBy('melhor', 'desc'), fs.limit(TOP_N));
+    fs.onSnapshot(q, { includeMetadataChanges: true }, snap => {
+      players = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
       if (!snap.metadata.fromCache) { clearTimeout(timer); dbMode = 'live'; }
       renderBoard();
     }, () => { clearTimeout(timer); dbMode = 'error'; renderBoard(); });
+    refreshTurmas(true);
   }
 
-  function sortedPlayers() {
-    return players.slice().sort((a, b) => (b.melhor || 0) - (a.melhor || 0) || String(a.atualizado || '').localeCompare(String(b.atualizado || '')));
+  // Média por turma: o servidor soma e conta (barato: ~1 leitura por turma).
+  async function refreshTurmas(force) {
+    if (!db) { turmaAgg = localAgg(); renderBoard(); return; }
+    if (aggBusy || (!force && Date.now() - aggAt < 60000)) return;
+    aggBusy = true;
+    try {
+      const col = fs.collection(db, 'jogadores');
+      const res = await Promise.all(ALL_TURMAS.map(async t => {
+        const s = await fs.getAggregateFromServer(fs.query(col, fs.where('turma', '==', t)), { n: fs.count(), soma: fs.sum('melhor') });
+        const d = s.data();
+        return { turma: t, jogadores: d.n || 0, total: d.soma || 0 };
+      }));
+      turmaAgg = res.filter(r => r.jogadores > 0);
+      aggAt = Date.now();
+    } catch (e) { /* mantém o último resultado */ }
+    aggBusy = false;
+    renderBoard();
   }
-
+  function localAgg() {
+    const m = new Map();
+    players.forEach(p => { const s = m.get(p.turma) || { turma: p.turma, total: 0, jogadores: 0 }; s.total += p.melhor || 0; s.jogadores++; m.set(p.turma, s); });
+    return [...m.values()];
+  }
   function turmaStats() {
-    const map = new Map();
-    players.forEach(p => {
-      const t = p.turma || '—';
-      if (!map.has(t)) map.set(t, { turma: t, total: 0, jogadores: 0, top: null });
-      const s = map.get(t);
-      s.total += p.melhor || 0; s.jogadores++;
-      if (!s.top || (p.melhor || 0) > (s.top.melhor || 0)) s.top = p;
-    });
-    return [...map.values()].map(s => Object.assign(s, { media: Math.round(s.total / s.jogadores) }))
-      .map(s => Object.assign(s, { valida: s.jogadores >= MIN_ALUNOS }))
+    return turmaAgg.map(s => Object.assign({}, s, { media: Math.round(s.total / s.jogadores), valida: s.jogadores >= MIN_ALUNOS }))
       .sort((a, b) => (b.valida - a.valida) || b.media - a.media || b.jogadores - a.jogadores);
   }
 
-  async function saveScore(score, level) {
+  async function loadTurmaFilter(t) {
+    turmaList = null;
+    if (!t) { renderBoard(); return; }
+    if (!db) { turmaList = loadLocal().filter(p => p.turma === t); renderBoard(); return; }
+    renderBoard();
+    try {
+      const s = await fs.getDocs(fs.query(fs.collection(db, 'jogadores'), fs.where('turma', '==', t), fs.limit(300)));
+      if (filtro.value === t) { turmaList = s.docs.map(d => Object.assign({ id: d.id }, d.data())); renderBoard(); }
+    } catch (e) { turmaList = []; renderBoard(); }
+  }
+
+  const sortList = list => list.slice().sort((a, b) => (b.melhor || 0) - (a.melhor || 0) || tsMs(a.atualizado) - tsMs(b.atualizado));
+
+  // ---------- Salvar pontuação ----------
+  async function saveScore(scoreVal, lvl) {
     const p = profile;
-    const apply = old => {
-      const melhorAntigo = old ? (old.melhor || 0) : 0;
-      const novo = score > melhorAntigo;
+    const build = old => {
+      const antigo = old ? (old.melhor || 0) : 0;
+      const novo = scoreVal > antigo;
       return {
         novo,
         body: {
-          nome: p.nome, ra: p.ra, turma: p.turma,
-          melhor: Math.max(melhorAntigo, score),
-          fase: novo ? level : (old ? old.fase || level : level),
-          partidas: (old ? old.partidas || 0 : 0) + 1,
-          atualizado: new Date().toISOString()
+          nome: old ? old.nome : p.nome,
+          turma: old ? old.turma : p.turma,
+          melhor: Math.max(antigo, scoreVal),
+          fase: novo ? lvl : (old ? old.fase || lvl : lvl),
+          partidas: (old ? old.partidas || 0 : 0) + 1
         }
       };
     };
     if (!db) {
       const list = loadLocal();
       const i = list.findIndex(x => x.id === p.id);
-      const r = apply(i >= 0 ? list[i] : null);
-      const row = Object.assign({ id: p.id }, r.body);
+      const r = build(i >= 0 ? list[i] : null);
+      const row = Object.assign({ id: p.id, atualizado: new Date().toISOString() }, r.body);
       if (i >= 0) list[i] = row; else list.push(row);
-      saveLocal(list); players = list; renderBoard();
-      return { ok: true, novo: r.novo, melhor: r.body.melhor };
+      saveLocal(list); players = sortList(list).slice(0, TOP_N); turmaAgg = localAgg(); renderBoard();
+      const pos = sortList(list).findIndex(x => x.id === p.id) + 1;
+      return { ok: true, novo: r.novo, melhor: r.body.melhor, pos, old: i >= 0 ? list[i] : null };
     }
-    const ref = db.collection('jogadores').doc(p.id);
+    const ref = fs.doc(db, 'jogadores', p.id);
     const attempt = async () => {
-      const snap = await ref.get();
-      const r = apply(snap.exists ? snap.data() : null);
-      await ref.set(r.body);
-      return { ok: true, novo: r.novo, melhor: r.body.melhor };
+      const snap = await fs.getDoc(ref);
+      const old = snap.exists() ? snap.data() : null;
+      const r = build(old);
+      await fs.setDoc(ref, Object.assign({}, r.body, { atualizado: fs.serverTimestamp() }));
+      let pos = null;
+      try { pos = (await fs.getCountFromServer(fs.query(fs.collection(db, 'jogadores'), fs.where('melhor', '>', r.body.melhor)))).data().count + 1; } catch (e) {}
+      return { ok: true, novo: r.novo, melhor: r.body.melhor, pos, old };
     };
-    try { return await attempt(); }
+    try { const r = await attempt(); refreshTurmas(true); return r; }
     catch (e) {
       if (e && e.code === 'unavailable') {
         await new Promise(res => setTimeout(res, 600 + Math.random() * 800));
-        try { return await attempt(); } catch (e2) { e = e2; }
+        try { const r = await attempt(); refreshTurmas(true); return r; } catch (e2) { e = e2; }
       }
       return { ok: false, code: e && e.code };
     }
   }
 
-  function positionOf(id) {
-    const i = sortedPlayers().findIndex(p => p.id === id);
-    return i >= 0 ? i + 1 : null;
-  }
-
   // ---------- Render do placar ----------
   const tableWrap = $('tableWrap'), filtro = $('fFiltro');
+  filtro.innerHTML = '<option value="">Todas (top ' + TOP_N + ')</option>' + ALL_TURMAS.map(t => `<option value="${esc(t)}">${esc(turmaLabel(t))}</option>`).join('');
+
   function renderBoard() {
     const live = $('liveStatus');
     live.className = 'live' + (dbMode === 'live' ? ' on' : (dbMode === 'error' || dbMode === 'slow') ? ' off' : '');
     live.textContent = { loading: 'conectando…', live: 'ao vivo', slow: 'sem conexão ainda', local: 'só neste aparelho', error: 'desconectado' }[dbMode];
 
-    // turmas no filtro e no autocompletar
-    const turmas = [...new Set(players.map(p => p.turma).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
-    const cur = filtro.value;
-    filtro.innerHTML = '<option value="">Todas</option>' + turmas.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
-    filtro.value = turmas.includes(cur) ? cur : '';
-    $('turmasList').innerHTML = turmas.map(t => `<option value="${esc(t)}"></option>`).join('');
-
     $('filterRow').hidden = tab !== 'ind';
     $('tabInd').setAttribute('aria-selected', tab === 'ind');
     $('tabTurma').setAttribute('aria-selected', tab === 'turma');
 
-    if (!players.length) {
-      tableWrap.innerHTML = `<div class="empty">${dbMode === 'loading' ? 'Carregando ranking…' : 'Ninguém jogou ainda.<br>Coloque nome, RA e turma e seja o primeiro do ranking.'}</div>`;
-    } else if (tab === 'ind') {
-      const list = sortedPlayers().map((p, i) => Object.assign({ pos: i + 1 }, p)).filter(p => !filtro.value || p.turma === filtro.value);
-      tableWrap.innerHTML = `<table><thead><tr><th>#</th><th>JOGADOR</th><th class="num">PONTOS</th></tr></thead><tbody>` +
-        list.map(p => `<tr class="${p.pos <= 3 ? 'top' + p.pos : ''} ${profile && p.id === profile.id ? 'me' : ''}">
-          <td class="pos">${p.pos}</td>
-          <td class="name">${esc(p.nome)}<span class="sub">${esc(p.turma)} · RA ${esc(p.ra)}</span></td>
-          <td class="num">${fmt(p.melhor)}<span class="sub">fase ${esc(p.fase || 1)} · ${esc(p.partidas || 1)}x</span>${canAdmin && db ? `<button type="button" class="del" data-del="${esc(p.id)}" aria-label="Remover ${esc(p.nome)}">×</button>` : ''}</td>
-        </tr>`).join('') + `</tbody></table>`;
+    if (tab === 'ind') {
+      const filtered = !!filtro.value;
+      if (filtered && turmaList === null) {
+        tableWrap.innerHTML = '<div class="empty">Carregando turma…</div>';
+      } else {
+        const base = filtered ? sortList(turmaList) : sortList(players);
+        if (!base.length) {
+          tableWrap.innerHTML = `<div class="empty">${dbMode === 'loading' ? 'Carregando ranking…' : filtered ? 'Ninguém dessa turma jogou ainda.' : 'Ninguém jogou ainda.<br>Coloque nome, RA e turma e seja o primeiro do ranking.'}</div>`;
+        } else {
+          tableWrap.innerHTML = `<table><thead><tr><th>#</th><th>JOGADOR</th><th class="num">PONTOS</th></tr></thead><tbody>` +
+            base.map((p, i) => `<tr class="${!filtered && i < 3 ? 'top' + (i + 1) : ''} ${profile && p.id === profile.id ? 'me' : ''}">
+              <td class="pos">${i + 1}</td>
+              <td class="name">${esc(p.nome)}<span class="sub">${esc(turmaLabel(p.turma))}</span></td>
+              <td class="num">${fmt(p.melhor)}<span class="sub">fase ${esc(p.fase || 1)} · ${esc(p.partidas || 1)}x</span></td>
+            </tr>`).join('') + `</tbody></table>`;
+        }
+      }
     } else {
       const list = turmaStats();
-      tableWrap.innerHTML = `<table><thead><tr><th>#</th><th>TURMA</th><th class="num">MÉDIA</th><th class="num">ALUNOS</th></tr></thead><tbody>` +
-        list.map((t, i) => `<tr class="${t.valida && i < 3 ? 'top' + (i + 1) : ''} ${profile && t.turma === profile.turma ? 'me' : ''}">
-          <td class="pos">${t.valida ? i + 1 : '—'}</td>
-          <td class="name"><span class="${t.valida ? '' : 'red'}">${esc(t.turma)}</span>${t.valida ? '' : `<span class="sub red">faltam ${MIN_ALUNOS - t.jogadores} aluno${MIN_ALUNOS - t.jogadores > 1 ? 's' : ''} para concorrer</span>`}<span class="sub">soma ${fmt(t.total)} · destaque: ${esc(t.top ? t.top.nome : '')}</span></td>
-          <td class="num">${fmt(t.media)}</td>
-          <td class="num">${t.jogadores}</td>
-        </tr>`).join('') + `</tbody></table>`;
+      if (!list.length) {
+        tableWrap.innerHTML = `<div class="empty">${dbMode === 'loading' ? 'Carregando turmas…' : 'Nenhuma turma jogou ainda.'}</div>`;
+      } else {
+        tableWrap.innerHTML = `<table><thead><tr><th>#</th><th>TURMA</th><th class="num">MÉDIA</th><th class="num">ALUNOS</th></tr></thead><tbody>` +
+          list.map((t, i) => `<tr class="${t.valida && i < 3 ? 'top' + (i + 1) : ''} ${profile && t.turma === profile.turma ? 'me' : ''}">
+            <td class="pos">${t.valida ? i + 1 : '—'}</td>
+            <td class="name"><span class="${t.valida ? '' : 'red'}">${esc(turmaLabel(t.turma))}</span>${t.valida ? '' : `<span class="sub red">faltam ${MIN_ALUNOS - t.jogadores} aluno${MIN_ALUNOS - t.jogadores > 1 ? 's' : ''} para concorrer</span>`}<span class="sub">soma ${fmt(t.total)}</span></td>
+            <td class="num">${fmt(t.media)}</td>
+            <td class="num">${t.jogadores}</td>
+          </tr>`).join('') + `</tbody></table>`;
+      }
     }
 
     $('boardNote').textContent = tab === 'turma'
-      ? 'Média = soma dos recordes dos alunos da turma ÷ número de alunos que jogaram. Só concorre a turma com pelo menos ' + MIN_ALUNOS + ' alunos; as que têm menos aparecem em vermelho no fim da lista.'
-      : dbMode === 'local' ? 'Ranking online desligado (falta configurar o Firebase); as partidas ficam salvas só neste aparelho.'
-      : 'Vale o melhor resultado de cada RA.';
+      ? 'Média = soma dos recordes dos alunos da turma ÷ número de alunos que jogaram. Só concorre a turma com pelo menos ' + MIN_ALUNOS + ' alunos; as que têm menos aparecem em vermelho no fim da lista. Atualiza a cada minuto.'
+      : dbMode === 'local' ? 'Ranking online desligado; as partidas ficam salvas só neste aparelho.'
+      : 'Vale o melhor resultado de cada aluno. O RA não aparece e não fica salvo de forma legível.';
 
-    const top = sortedPlayers()[0];
-    $('menuRecord').textContent = top ? `RECORDE: ${fmt(top.melhor)} · ${top.nome} (${top.turma})` : '';
+    const top = sortList(players)[0];
+    $('menuRecord').textContent = top ? `RECORDE: ${fmt(top.melhor)} · ${top.nome} (${turmaLabel(top.turma)})` : '';
   }
 
   $('tabInd').addEventListener('click', () => { tab = 'ind'; renderBoard(); });
-  $('tabTurma').addEventListener('click', () => { tab = 'turma'; renderBoard(); });
-  filtro.addEventListener('change', renderBoard);
-  tableWrap.addEventListener('click', async e => {
-    const b = e.target.closest('[data-del]');
-    if (!b || !db) return;
-    if (!b.classList.contains('confirm')) {
-      b.classList.add('confirm'); b.textContent = 'remover?';
-      setTimeout(() => { if (b.isConnected) { b.classList.remove('confirm'); b.textContent = '×'; } }, 3000);
-      return;
-    }
-    b.disabled = true;
-    try { await db.collection('jogadores').doc(b.dataset.del).delete(); } catch (err) { b.disabled = false; }
-  });
+  $('tabTurma').addEventListener('click', () => { tab = 'turma'; renderBoard(); refreshTurmas(false); });
+  filtro.addEventListener('change', () => loadTurmaFilter(filtro.value));
   const board = $('board');
-  document.querySelectorAll('[data-open-board]').forEach(b => b.addEventListener('click', () => { board.classList.add('open'); renderBoard(); }));
+  document.querySelectorAll('[data-open-board]').forEach(b => b.addEventListener('click', () => { board.classList.add('open'); renderBoard(); refreshTurmas(false); }));
   $('btnCloseBoard').addEventListener('click', () => board.classList.remove('open'));
+  setInterval(() => { if (!document.hidden && tab === 'turma') refreshTurmas(false); }, 60000);
 
   connect();
   renderBoard();
 
   // ---------- Formulário do jogador ----------
   const fNome = $('fNome'), fRa = $('fRa'), fTurma = $('fTurma');
-  const TURMAS = [['1º ano', 'ABCDEFGHI'], ['2º ano', 'ABCDEF'], ['3º ano', 'ABCD'], ['4º ano', 'ABC'], ['5º ano', 'ABC']];
   fTurma.innerHTML = '<option value="">Escolha…</option>' +
     TURMAS.map(([ano, letras]) => `<optgroup label="${ano}">` + [...letras].map(l => `<option value="${ano[0]}º ${l}">${ano[0]}º ${l}</option>`).join('') + '</optgroup>').join('') +
     '<optgroup label="Equipe"><option value="PROFESSORES">Professores</option></optgroup>';
-  try {
-    const saved = JSON.parse(localStorage.getItem('dvs-jogador') || 'null');
-    if (saved) { fNome.value = saved.nome || ''; fRa.value = saved.ra || ''; fTurma.value = saved.turma || ''; }
-  } catch (e) {}
 
-  $('playerForm').addEventListener('submit', e => {
+  $('playerForm').addEventListener('submit', async e => {
     e.preventDefault();
     [fNome, fRa, fTurma].forEach(i => i.removeAttribute('aria-invalid'));
-    const nome = fNome.value.trim().replace(/\s+/g, ' ');
-    const ra = fRa.value.trim();
-    const turma = normTurma(fTurma.value);
+    const nome = shortName(fNome.value);
+    const ra = fRa.value.trim().replace(/[^A-Za-z0-9]/g, '');
+    const turma = fTurma.value;
     let erro = '';
-    if (!nome) { erro = 'Escreva seu nome.'; fNome.setAttribute('aria-invalid', 'true'); }
-    else if (!raId(ra)) { erro = 'Escreva seu RA (só letras e números).'; fRa.setAttribute('aria-invalid', 'true'); }
-    else if (!turma) { erro = 'Escolha sua turma.'; fTurma.setAttribute('aria-invalid', 'true'); }
+    if (nome.length < 2) { erro = 'Escreva seu nome (só letras).'; fNome.setAttribute('aria-invalid', 'true'); }
+    else if (hasBadWord(fNome.value)) { erro = 'Esse nome não pode ser usado. Escreva seu nome de verdade.'; fNome.setAttribute('aria-invalid', 'true'); }
+    else if (ra.length < 3 || ra.length > 20) { erro = 'Escreva seu RA (só letras e números).'; fRa.setAttribute('aria-invalid', 'true'); }
+    else if (!ALL_TURMAS.includes(turma)) { erro = 'Escolha sua turma.'; fTurma.setAttribute('aria-invalid', 'true'); }
     $('formError').textContent = erro;
     if (erro) return;
-    profile = { id: raId(ra), nome, ra, turma };
-    try { localStorage.setItem('dvs-jogador', JSON.stringify({ nome, ra, turma })); } catch (err) {}
+    profile = { id: await raToId(ra), nome, turma };
+    fRa.value = '';
     start();
   });
 
@@ -691,12 +754,19 @@ window.FIREBASE_CONFIG = {
     $('btnAgain').disabled = false;
     $('btnAgain').focus();
     if (r.ok) {
-      const pos = positionOf(profile.id);
+      const pos = r.pos;
+      let extra = '';
+      if (r.old && (r.old.turma !== profile.turma || r.old.nome !== profile.nome)) {
+        extra = ` Este RA já está registrado como ${r.old.nome} (${turmaLabel(r.old.turma)}).`;
+        profile.nome = r.old.nome; profile.turma = r.old.turma;
+      }
       st.className = 'save-status ok';
-      st.textContent = (r.novo ? 'Novo recorde pessoal! ' : `Seu recorde continua ${fmt(r.melhor)}. `) + (pos ? `Você está em ${pos}º lugar.` : '');
+      st.textContent = (r.novo ? 'Novo recorde pessoal! ' : `Seu recorde continua ${fmt(r.melhor)}. `) + (pos ? `Você está em ${pos}º lugar.` : '') + extra;
     } else {
       st.className = 'save-status err';
-      st.textContent = 'Não deu para salvar. Confira a internet e tente de novo.';
+      st.textContent = r.code === 'permission-denied'
+        ? 'O ranking recusou essa pontuação. Fale com a equipe do estande.'
+        : 'Não deu para salvar. Confira a internet e tente de novo.';
     }
   }
   function togglePause() {
