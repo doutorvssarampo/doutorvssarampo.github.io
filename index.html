@@ -81,6 +81,24 @@ form.player input, form.player select {
 }
 form.player select:focus, form.player input:focus { outline: none; border-color: var(--mint); }
 form.player select[aria-invalid="true"], form.player input[aria-invalid="true"] { border-color: var(--virus); }
+.av-field { display: grid; gap: 6px; }
+#menu { padding-top: 48px; gap: 12px; }
+.k-touch { display: none; }
+@media (pointer: coarse) { .k-desk { display: none; } .k-touch { display: inline; } }
+@container (max-height: 700px) {
+  #menu .intro, #menu .legend { display: none; }
+  #menu { gap: 8px; }
+  #menu .privacy-note { font-size: 15px !important; }
+  #menu .keys { font-size: 16px; }
+  #menu .form-error { min-height: 0; }
+  form.player input, form.player select { font-size: 19px; }
+}
+.avatars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.av { background: #12313a; border: 2px solid var(--grid); padding: 4px 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.av:hover { border-color: var(--muted); }
+.av[aria-pressed="true"] { border-color: var(--gold); background: rgba(255, 209, 102, 0.14); }
+.av canvas { height: clamp(34px, 9cqw, 48px); width: auto; image-rendering: pixelated; }
+.av canvas.smooth { image-rendering: auto; }
 .privacy-note { margin: 0 !important; font-size: 17px !important; color: var(--muted); }
 .form-error { color: var(--virus) !important; min-height: 1em; font-size: 19px !important; }
 
@@ -189,7 +207,7 @@ window.FIREBASE_CONFIG = {
 
   <div class="overlay" id="menu">
     <h1><span class="green">DOUTOR</span><span class="vs">vs</span><span class="red">SARAMPO</span></h1>
-    <p>Destrua os vírus com remédio antes que eles cheguem à cidade.</p>
+    <p class="intro">Destrua os vírus com remédio antes que eles cheguem à cidade.</p>
     <form class="player" id="playerForm" novalidate>
       <label for="fNome"><span class="small-label">NOME</span>
         <input id="fNome" name="nome" maxlength="60" autocomplete="off" placeholder="Nome e sobrenome">
@@ -202,9 +220,9 @@ window.FIREBASE_CONFIG = {
           <select id="fTurma" name="turma"><option value="">Escolha…</option></select>
         </label>
       </div>
-      <datalist id="turmasList"></datalist>
+      <div class="av-field"><span class="small-label">ESCOLHA SEU MÉDICO</span><div class="avatars" id="avatars" role="group" aria-label="Escolha seu médico"></div></div>
       <p class="form-error" id="formError" role="alert"></p>
-      <p class="privacy-note">No ranking do estande aparece só o primeiro nome e a inicial (ex.: Ana S.). O RA não aparece.</p>
+      <p class="privacy-note">No ranking aparece só o primeiro nome e a inicial (ex.: Ana S.). O RA não aparece.</p>
     </form>
     <div class="seg" role="group" aria-label="Escolha o visual">
       <span class="small-label">VISUAL</span>
@@ -216,8 +234,8 @@ window.FIREBASE_CONFIG = {
       <span>💊 remédio</span><span>💉 vacina = escudo</span><span>⭐ tiro triplo</span>
     </div>
     <div class="keys">
-      <kbd>←</kbd><kbd>→</kbd> mover <kbd>ESPAÇO</kbd> atirar <kbd>P</kbd> pausa<br>
-      No celular: arraste o dedo, o doutor atira sozinho
+      <span class="k-desk"><kbd>←</kbd><kbd>→</kbd> mover <kbd>ESPAÇO</kbd> atirar <kbd>P</kbd> pausa</span>
+      <span class="k-touch">Arraste o dedo na tela: o doutor anda e atira sozinho</span>
     </div>
   </div>
 
@@ -385,19 +403,44 @@ window.FIREBASE_CONFIG = {
   const btnSound = $('btnSound');
   btnSound.addEventListener('click', () => { soundOn = !soundOn; btnSound.textContent = soundOn ? 'SOM ON' : 'SOM OFF'; btnSound.blur(); });
 
-  const DOC = [
-    "...cccccc...", "..ccc++ccc..", "..cccccccc..", "..hssssssh..", "..skssssks..", "..ssssssss..",
-    "..mmmmmmmm..", "...mmmmmm...", ".wwwwbbwwww.", "wwwwbwwbwwww", "wwwwbwwbwwww", "sgwwwbbwwwgs",
-    ".gwwwwwwwwg.", "..wwwwwwww..", "..dd....dd..", "..dd....dd.."
+  // ---------- Avatares do médico ----------
+  const SKINS = ['#f6d3b3', '#e9b994', '#c68a5c', '#9b6a43', '#6b4529'];
+  const AVATARS = [
+    { sexo: 'm', pele: 0, cabelo: '#5a3a24', estilo: 'curto',   touca: '#5ef2c0', desc: 'Médico de pele clara e cabelo castanho' },
+    { sexo: 'm', pele: 1, cabelo: '#e8c15a', estilo: 'curto',   touca: '#4ea8ff', desc: 'Médico loiro' },
+    { sexo: 'm', pele: 2, cabelo: null,      estilo: 'careca',  touca: null,      desc: 'Médico careca de pele morena' },
+    { sexo: 'm', pele: 4, cabelo: '#3a2b24', estilo: 'crespo',  touca: '#5ef2c0', desc: 'Médico negro de cabelo crespo' },
+    { sexo: 'f', pele: 0, cabelo: '#b5482a', estilo: 'longo',   touca: '#c9a7ff', desc: 'Médica ruiva de cabelo longo' },
+    { sexo: 'f', pele: 1, cabelo: '#e8c15a', estilo: 'longo',   touca: '#ff9ec4', desc: 'Médica loira de cabelo longo' },
+    { sexo: 'f', pele: 3, cabelo: '#33261f', estilo: 'longo',   touca: '#5ef2c0', desc: 'Médica morena de cabelo preto longo' },
+    { sexo: 'f', pele: 4, cabelo: '#4a3226', estilo: 'crespoF', touca: '#ff9ec4', desc: 'Médica negra de cabelo crespo' }
   ];
-  const DOC_COL = { c: C.mint, '+': '#ffffff', h: '#5a3a24', s: C.skin, k: C.dark, m: '#9fd8ff', w: C.coat, b: C.blue, g: C.coatShade, d: '#3b4a66' };
+  let avatarIdx = 0;
+  function shade(hex, f) {
+    const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+    const t = f > 0 ? 255 : 0, a = Math.abs(f);
+    const m = v => Math.round(v + (t - v) * a);
+    return '#' + [m(r), m(g), m(b)].map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+  const HEADS = {
+    curto: ["...cccccc...", "..ccc++ccc..", "..cccccccc..", "..hssssssh..", "..skssssks..", "..ssssssss..", "..mmmmmmmm..", "...mmmmmm..."],
+    careca: ["............", "...ssssss...", "..sSSsssss..", "..ssssssss..", "..skssssks..", "..ssssssss..", "..mmmmmmmm..", "...mmmmmm..."],
+    longo: ["...cccccc...", "..ccc++ccc..", ".hcccccccch.", ".hssssssssh.", ".hskssssksh.", ".hssssssssh.", ".hmmmmmmmmh.", ".hhmmmmmmhh."],
+    crespo: ["..hhcccchh..", ".hhcc++cchh.", ".hcccccccch.", ".hhsssssshh.", "..skssssks..", "..ssssssss..", "..mmmmmmmm..", "...mmmmmm..."],
+    crespoF: ["..hhcccchh..", ".hhcc++cchh.", ".hcccccccch.", ".hhsssssshh.", ".hskssssksh.", ".hssssssssh.", ".hmmmmmmmmh.", ".hhmmmmmmhh."]
+  };
+  const BODY = [".wwwwbbwwww.", "wwwwbwwbwwww", "wwwwbwwbwwww", "sgwwwbbwwwgs", ".gwwwwwwwwg.", "..wwwwwwww..", "..dd....dd..", "..dd....dd.."];
   const PX = 4;
-  const docSprite = document.createElement('canvas');
-  docSprite.width = 12 * PX; docSprite.height = DOC.length * PX;
-  (() => {
-    const g = docSprite.getContext('2d');
-    DOC.forEach((row, y) => [...row].forEach((ch, x) => { if (DOC_COL[ch]) { g.fillStyle = DOC_COL[ch]; g.fillRect(x * PX, y * PX, PX, PX); } }));
-  })();
+  const docSprites = AVATARS.map(av => {
+    const skin = SKINS[av.pele];
+    const col = { c: av.touca || skin, '+': '#ffffff', h: av.cabelo || skin, s: skin, S: shade(skin, 0.35), k: '#140e0e', m: '#9fd8ff', w: C.coat, b: C.blue, g: C.coatShade, d: '#3b4a66' };
+    const rows = HEADS[av.estilo].concat(BODY);
+    const cv = document.createElement('canvas');
+    cv.width = 12 * PX; cv.height = rows.length * PX;
+    const g = cv.getContext('2d');
+    rows.forEach((row, y) => [...row].forEach((ch, x) => { if (col[ch]) { g.fillStyle = col[ch]; g.fillRect(x * PX, y * PX, PX, PX); } }));
+    return cv;
+  });
 
   // ---------- Visual 3D (sprites pré-renderizados com luz e sombra) ----------
   const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; };
@@ -437,8 +480,8 @@ window.FIREBASE_CONFIG = {
     }
     sph(g, cx, cy, R, '#ffc2cb', '#e8334b', '#3d0610');
     for (let i = 0; i < 7; i++) { const a = i * 2.3, d = R * (0.25 + 0.4 * ((i * 37) % 10) / 10); sph(g, cx + Math.cos(a) * d, cy + Math.sin(a) * d, R * 0.11, '#ffe3e8', '#ff9aae', '#a3263c'); }
-    const rim = g.createRadialGradient(cx + R * 0.6, cy + R * 0.5, R * 0.6, cx, cy, R * 1.05);
-    rim.addColorStop(0, 'rgba(94,242,192,0)'); rim.addColorStop(0.85, 'rgba(94,242,192,0)'); rim.addColorStop(1, 'rgba(94,242,192,0.45)');
+    const rim = g.createRadialGradient(cx - R * 0.15, cy - R * 0.12, R * 0.72, cx, cy, R * 1.02);
+    rim.addColorStop(0, 'rgba(94,242,192,0)'); rim.addColorStop(0.7, 'rgba(94,242,192,0)'); rim.addColorStop(1, 'rgba(94,242,192,0.4)');
     g.fillStyle = rim; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fill();
   })();
 
@@ -451,26 +494,78 @@ window.FIREBASE_CONFIG = {
     g.fillStyle = lin(g, -14, 14, ['#9aa8ad', '#ffffff', '#7d8a8f']); g.beginPath(); g.roundRect(-14, 0, 28, 30, [0, 0, 14, 14]); g.fill();
   })();
 
-  const [doc3d, gd] = mk(290, 360);
-  (() => {
-    const g = gd, cx = 320; g.translate(-175, -378);
+  function build3DDoctor(av) {
+    const [cv, g] = mk(290, 390);
+    const cx = 320; g.translate(-175, -348);
+    const skin = SKINS[av.pele], sL = shade(skin, 0.4), sD = shade(skin, -0.5);
+    const hair = av.cabelo, hL = hair && shade(hair, 0.5), hD = hair && shade(hair, -0.45);
+    // cabelo atrás da cabeça
+    if (av.estilo === 'longo') {
+      g.fillStyle = lin(g, cx - 86, cx + 86, [hD, hL, hair, hD]);
+      g.beginPath(); g.roundRect(cx - 86, 420, 172, 168, [70, 70, 30, 30]); g.fill();
+    }
+    if (av.estilo === 'crespo' || av.estilo === 'crespoF') {
+      const puffs = [[cx, 408, 58], [cx - 52, 420, 44], [cx + 52, 420, 44], [cx - 70, 460, 36], [cx + 70, 460, 36]];
+      if (av.estilo === 'crespoF') puffs.push([cx - 78, 510, 38], [cx + 78, 510, 38], [cx - 66, 552, 32], [cx + 66, 552, 32]);
+      puffs.forEach(([x, y, r]) => sph(g, x, y, r, hL, hair, hD));
+    }
     g.fillStyle = lin(g, cx - 60, cx + 60, ['#1b2438', '#4a5c80', '#141b2b']); g.beginPath(); g.roundRect(cx - 52, 650, 40, 80, 10); g.roundRect(cx + 12, 650, 40, 80, 10); g.fill();
     g.fillStyle = lin(g, cx - 110, cx + 110, ['#8e9ea3', '#ffffff', '#dfe7e9', '#6e7d82']);
     g.beginPath(); g.moveTo(cx - 70, 560); g.quadraticCurveTo(cx - 112, 580, cx - 104, 700); g.lineTo(cx + 104, 700); g.quadraticCurveTo(cx + 112, 580, cx + 70, 560); g.closePath(); g.fill();
-    [-1, 1].forEach(s => { g.save(); g.translate(cx + s * 96, 600); g.rotate(s * -0.25); g.fillStyle = lin(g, -20, 20, ['#9aa9ae', '#ffffff', '#7f8e93']); g.beginPath(); g.roundRect(-20, -10, 40, 100, 18); g.fill(); sph(g, 0, 98, 17, '#ffe2c8', '#e9b48a', '#8c5a3a'); g.restore(); });
+    [-1, 1].forEach(sd => { g.save(); g.translate(cx + sd * 96, 600); g.rotate(sd * -0.25); g.fillStyle = lin(g, -20, 20, ['#9aa9ae', '#ffffff', '#7f8e93']); g.beginPath(); g.roundRect(-20, -10, 40, 100, 18); g.fill(); sph(g, 0, 98, 17, sL, skin, sD); g.restore(); });
     g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, 580); g.lineTo(cx, 700); g.stroke();
     g.strokeStyle = '#2e7fd6'; g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx - 34, 560); g.quadraticCurveTo(cx - 40, 630, cx, 640); g.quadraticCurveTo(cx + 40, 630, cx + 34, 560); g.stroke();
     sph(g, cx, 648, 14, '#e6f2ff', '#9fb4c8', '#3b4d5e');
-    const nk = g.createLinearGradient(0, 540, 0, 570); nk.addColorStop(0, '#a8754f'); nk.addColorStop(1, '#e2ac83'); g.fillStyle = nk; g.fillRect(cx - 22, 535, 44, 30);
-    sph(g, cx, 480, 70, '#ffe6cf', '#eab68c', '#8a5636');
+    const nk = g.createLinearGradient(0, 540, 0, 570); nk.addColorStop(0, sD); nk.addColorStop(1, skin); g.fillStyle = nk; g.fillRect(cx - 22, 535, 44, 30);
+    if (av.estilo === 'careca') [-1, 1].forEach(sd => sph(g, cx + sd * 68, 484, 14, sL, skin, sD));
+    sph(g, cx, 480, 70, sL, skin, sD);
+    if (av.estilo === 'careca') {
+      const sh = g.createRadialGradient(cx - 28, 430, 2, cx - 28, 430, 30); sh.addColorStop(0, 'rgba(255,255,255,0.45)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = sh; g.beginPath(); g.arc(cx - 28, 430, 30, 0, Math.PI * 2); g.fill();
+    }
+    if (hair && av.estilo !== 'careca') {
+      g.fillStyle = lin(g, cx - 72, cx + 72, [hD, hL, hD]);
+      g.beginPath(); g.ellipse(cx, 448, 71, 18, 0, 0, Math.PI * 2); g.fill();
+      if (av.estilo === 'curto') { g.beginPath(); g.ellipse(cx - 64, 468, 9, 22, 0.15, 0, Math.PI * 2); g.ellipse(cx + 64, 468, 9, 22, -0.15, 0, Math.PI * 2); g.fill(); }
+      if (av.estilo === 'longo') { g.beginPath(); g.ellipse(cx - 62, 490, 14, 44, 0.1, 0, Math.PI * 2); g.ellipse(cx + 62, 490, 14, 44, -0.1, 0, Math.PI * 2); g.fill(); }
+    }
     g.fillStyle = lin(g, cx - 70, cx + 70, ['#5d9cc4', '#d6efff', '#4a7fa3']);
     g.beginPath(); g.moveTo(cx - 66, 488); g.quadraticCurveTo(cx, 470, cx + 66, 488); g.quadraticCurveTo(cx + 58, 548, cx, 552); g.quadraticCurveTo(cx - 58, 548, cx - 66, 488); g.fill();
     g.strokeStyle = 'rgba(40,80,110,0.35)'; g.lineWidth = 2; [505, 520, 535].forEach(y => { g.beginPath(); g.moveTo(cx - 50, y); g.quadraticCurveTo(cx, y - 6, cx + 50, y); g.stroke(); });
-    [-1, 1].forEach(s => { sph(g, cx + s * 26, 462, 13, '#ffffff', '#e9eef0', '#9aa5a9'); sph(g, cx + s * 26 + 3, 463, 7, '#5b4a3a', '#2a1d14', '#0b0705'); g.fillStyle = '#fff'; g.beginPath(); g.arc(cx + s * 26, 459, 2.5, 0, Math.PI * 2); g.fill(); });
-    g.fillStyle = lin(g, cx - 80, cx + 80, ['#1d8e6c', '#8cffd9', '#137055']);
-    g.beginPath(); g.moveTo(cx - 74, 450); g.quadraticCurveTo(cx - 80, 388, cx, 384); g.quadraticCurveTo(cx + 80, 388, cx + 74, 450); g.quadraticCurveTo(cx, 432, cx - 74, 450); g.fill();
-    g.fillStyle = '#ffffff'; g.fillRect(cx - 5, 398, 10, 30); g.fillRect(cx - 15, 408, 30, 10);
-  })();
+    [-1, 1].forEach(sd => {
+      sph(g, cx + sd * 26, 462, 13, '#ffffff', '#e9eef0', '#9aa5a9'); sph(g, cx + sd * 26 + 3, 463, 7, '#5b4a3a', '#2a1d14', '#0b0705');
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(cx + sd * 26, 459, 2.5, 0, Math.PI * 2); g.fill();
+      if (av.sexo === 'f') { g.strokeStyle = '#140e0e'; g.lineWidth = 3; g.lineCap = 'round'; for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(cx + sd * 26 + i * 7, 450); g.lineTo(cx + sd * 26 + i * 9 + sd * 3, 442); g.stroke(); } }
+    });
+    if (av.touca) {
+      g.fillStyle = lin(g, cx - 80, cx + 80, [shade(av.touca, -0.45), shade(av.touca, 0.4), shade(av.touca, -0.55)]);
+      g.beginPath(); g.moveTo(cx - 74, 450); g.quadraticCurveTo(cx - 80, 388, cx, 384); g.quadraticCurveTo(cx + 80, 388, cx + 74, 450); g.quadraticCurveTo(cx, 432, cx - 74, 450); g.fill();
+      g.fillStyle = '#ffffff'; g.fillRect(cx - 5, 398, 10, 30); g.fillRect(cx - 15, 408, 30, 10);
+    }
+    return cv;
+  }
+  const doc3ds = AVATARS.map(build3DDoctor);
+
+  // ---------- Escolha do avatar ----------
+  const avBox = $('avatars');
+  avBox.innerHTML = AVATARS.map((av, i) => `<button type="button" class="av" data-av="${i}" aria-pressed="${i === 0}" aria-label="${av.desc}" title="${av.desc}"></button>`).join('');
+  function renderAvatarPicker() {
+    avBox.querySelectorAll('.av').forEach(btn => {
+      const i = +btn.dataset.av;
+      const src = visual === '3d' ? doc3ds[i] : docSprites[i];
+      let cv = btn.querySelector('canvas');
+      if (!cv) { cv = document.createElement('canvas'); btn.appendChild(cv); }
+      if (visual === '3d') { cv.width = 145; cv.height = 195; cv.className = 'smooth'; }
+      else { cv.width = 48; cv.height = 64; cv.className = ''; }
+      const g = cv.getContext('2d'); g.imageSmoothingEnabled = visual === '3d';
+      g.clearRect(0, 0, cv.width, cv.height); g.drawImage(src, 0, 0, cv.width, cv.height);
+      btn.setAttribute('aria-pressed', String(i === avatarIdx));
+    });
+  }
+  avBox.addEventListener('click', e => {
+    const b = e.target.closest('.av'); if (!b) return;
+    avatarIdx = +b.dataset.av; renderAvatarPicker();
+  });
 
   let visual = 'pixel';
   try { if (localStorage.getItem('dvs-visual') === '3d') visual = '3d'; } catch (e) {}
@@ -479,6 +574,7 @@ window.FIREBASE_CONFIG = {
     try { localStorage.setItem('dvs-visual', v); } catch (e) {}
     document.querySelectorAll('[data-visual]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.visual === v)));
     $('btnVisual').textContent = v === '3d' ? '3D' : 'PIXEL';
+    renderAvatarPicker();
   }
   document.querySelectorAll('[data-visual]').forEach(b => b.addEventListener('click', () => setVisual(b.dataset.visual)));
   $('btnVisual').addEventListener('click', e => { setVisual(visual === '3d' ? 'pixel' : '3d'); e.currentTarget.blur(); });
@@ -492,7 +588,7 @@ window.FIREBASE_CONFIG = {
   const stars = Array.from({ length: 40 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: Math.random() * 1.5 + 0.5, v: Math.random() * 20 + 10 }));
 
   function reset() {
-    player = { x: W / 2, y: H - 80, w: docSprite.width, h: docSprite.height, speed: 340, cool: 0 };
+    player = { x: W / 2, y: H - 80, w: docSprites[0].width, h: docSprites[0].height, speed: 340, cool: 0 };
     bullets = []; viruses = []; particles = []; powerups = []; floats = [];
     score = 0; lives = 3; level = 1; kills = 0; spawnT = 0.5;
     shield = 0; triple = 0; inv = 0; shake = 0; levelBanner = 2;
@@ -817,9 +913,9 @@ window.FIREBASE_CONFIG = {
         const sh = ctx.createRadialGradient(player.x, player.y + 32, 2, player.x, player.y + 32, 30);
         sh.addColorStop(0, 'rgba(0,0,0,0.6)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = sh; ctx.beginPath(); ctx.ellipse(player.x, player.y + 32, 30, 7, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.drawImage(doc3d, player.x - 26, player.y - 36, 52, 65);
+        ctx.drawImage(doc3ds[avatarIdx], player.x - 26, player.y - 41.4, 52, 69.9);
       } else {
-        ctx.drawImage(docSprite, Math.round(player.x - player.w / 2), Math.round(player.y - player.h / 2));
+        ctx.drawImage(docSprites[avatarIdx], Math.round(player.x - player.w / 2), Math.round(player.y - player.h / 2));
       }
     }
 
