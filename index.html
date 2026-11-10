@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Doutor vs Sarampo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<style>
+/* Layout: tela de fliperama 2:3 com o placar ao lado em telas largas (modo feira); no celular o ranking abre por cima */
+:root {
+  --bg: #08161b;
+  --screen: #0d2329;
+  --grid: #14353d;
+  --mint: #5ef2c0;
+  --virus: #ff4d5e;
+  --gold: #ffd166;
+  --blue: #4ea8ff;
+  --ink: #e8fbf5;
+  --muted: #8fb8ad;
+  --display: "Press Start 2P", ui-monospace, monospace;
+  --body: "VT323", ui-monospace, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  overflow: hidden;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+.cabinet {
+  position: relative;
+  height: min(100%, calc((100vw - 32px) * 1.5));
+  aspect-ratio: 2 / 3;
+  max-width: 100%;
+  border: 3px solid var(--grid);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 0 6px #050e11, 0 0 40px rgba(94, 242, 192, 0.12);
+  background: var(--screen);
+  flex: 0 0 auto;
+  container-type: size;
+}
+canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: safe center;
+  gap: 14px; text-align: center; padding: 20px;
+  background: rgba(8, 22, 27, 0.9);
+  overflow-y: auto;
+}
+.overlay h1 {
+  font-family: var(--display);
+  font-size: clamp(16px, 4.6cqw, 26px);
+  line-height: 1.5; margin: 0; text-wrap: balance;
+}
+.overlay h1 .vs { color: var(--muted); font-size: 0.55em; margin: 0 6px; }
+.red { color: var(--virus); }
+.green { color: var(--mint); }
+.overlay p { margin: 0; font-size: clamp(18px, 4.2cqw, 23px); line-height: 1.15; max-width: 30ch; color: var(--muted); }
+.fact { border: 2px dashed var(--grid); padding: 10px 12px; color: var(--ink) !important; max-width: 32ch; }
+.fact b { color: var(--gold); font-weight: normal; font-family: var(--display); font-size: 9px; display: block; margin-bottom: 6px; letter-spacing: 0.08em; }
+.big { font-family: var(--display); font-size: clamp(12px, 3.4cqw, 17px); color: var(--gold); line-height: 1.6; }
+.small-label { font-family: var(--display); font-size: 9px; letter-spacing: 0.06em; color: var(--muted); }
+
+form.player { display: grid; gap: 8px; width: min(100%, 300px); text-align: left; }
+form.player .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+form.player label { display: grid; gap: 4px; min-width: 0; }
+form.player input, form.player select {
+  font-family: var(--body); font-size: 22px; color: var(--ink);
+  background: var(--bg); border: 2px solid var(--grid); padding: 4px 8px; width: 100%; box-sizing: border-box; min-width: 0;
+}
+form.player select:focus, form.player input:focus { outline: none; border-color: var(--mint); }
+form.player select[aria-invalid="true"], form.player input[aria-invalid="true"] { border-color: var(--virus); }
+.form-error { color: var(--virus) !important; min-height: 1em; font-size: 19px !important; }
+
+button { font-family: var(--display); cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+button.start {
+  font-size: clamp(11px, 3.2cqw, 15px);
+  background: var(--mint); color: var(--bg); border: 0; padding: 13px 18px;
+  box-shadow: 4px 4px 0 #2a8f72;
+}
+button.start:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #2a8f72; }
+button.ghost {
+  font-size: 10px; color: var(--ink); background: transparent; border: 2px solid var(--grid); padding: 9px 12px;
+}
+button.ghost:hover { border-color: var(--muted); }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.keys { font-size: 19px; color: var(--muted); line-height: 1.3; }
+.keys kbd { font-family: var(--display); font-size: 8px; color: var(--ink); border: 1px solid var(--muted); padding: 3px 5px; margin: 0 2px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: 19px; color: var(--muted); }
+.toolbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; z-index: 2; }
+.toolbar button { font-size: 9px; color: var(--ink); background: rgba(13, 35, 41, 0.85); border: 1px solid var(--grid); padding: 6px 7px; }
+.seg { display: flex; align-items: center; gap: 6px; }
+.seg .small-label { margin-right: 4px; }
+.seg button { font-size: 10px; padding: 8px 12px; background: var(--bg); color: var(--muted); border: 2px solid var(--grid); }
+.seg button[aria-pressed="true"] { background: var(--gold); color: var(--bg); border-color: var(--gold); }
+.save-status { font-size: 20px; color: var(--muted); min-height: 1.2em; }
+.save-status.ok { color: var(--mint); }
+.save-status.err { color: var(--virus); }
+
+/* ---------- Ranking ---------- */
+.board {
+  width: 380px; flex: 0 1 380px; min-width: 0;
+  height: min(100%, 860px);
+  display: flex; flex-direction: column; gap: 12px;
+  border: 3px solid var(--grid); border-radius: 10px; background: var(--screen);
+  padding: 16px; box-sizing: border-box;
+}
+.board-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.board-head h2 { font-family: var(--display); font-size: 16px; margin: 0; color: var(--gold); }
+.live { font-size: 18px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.live::before { content: ""; width: 8px; height: 8px; background: var(--muted); display: inline-block; }
+.live.on::before { background: var(--mint); animation: pulse 1.4s steps(2) infinite; }
+.live.off::before { background: var(--virus); }
+@keyframes pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .live.on::before { animation: none; } }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tabs button { font-size: 9px; padding: 9px 6px; background: var(--bg); color: var(--muted); border: 2px solid var(--grid); }
+.tabs button[aria-selected="true"] { color: var(--bg); background: var(--mint); border-color: var(--mint); }
+.filter { display: flex; align-items: center; gap: 8px; font-size: 19px; color: var(--muted); }
+.filter select { font-family: var(--body); font-size: 19px; background: var(--bg); color: var(--ink); border: 2px solid var(--grid); padding: 2px 6px; min-width: 0; flex: 1; }
+.table-wrap { flex: 1; overflow: auto; min-height: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 20px; font-variant-numeric: tabular-nums; }
+th { font-family: var(--display); font-size: 8px; color: var(--muted); text-align: left; font-weight: normal; padding: 6px 4px; border-bottom: 2px solid var(--grid); position: sticky; top: 0; background: var(--screen); letter-spacing: 0.04em; }
+td { padding: 5px 4px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+td.pos { font-family: var(--display); font-size: 10px; color: var(--muted); width: 2.4em; padding-top: 9px; }
+tr.top1 td.pos { color: var(--gold); }
+tr.top2 td.pos { color: #d8e3e0; }
+tr.top3 td.pos { color: #e09a62; }
+tr.me td { background: rgba(94, 242, 192, 0.1); }
+td .sub { display: block; font-size: 16px; color: var(--muted); line-height: 1; }
+td.name { word-break: break-word; }
+td .sub.red { color: var(--virus); }
+.del { font-size: 8px; color: var(--muted); background: none; border: 1px solid var(--grid); padding: 3px 4px; margin-left: 4px; }
+.del.confirm { color: var(--virus); border-color: var(--virus); }
+.empty { color: var(--muted); font-size: 20px; text-align: center; padding: 24px 8px; line-height: 1.2; }
+.board-note { font-size: 17px; color: var(--muted); line-height: 1.15; margin: 0; }
+.only-narrow { display: none; }
+
+@media (max-width: 899px) {
+  .board {
+    position: fixed; inset: 0; z-index: 30; width: auto; height: auto; border-radius: 0; border: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    display: none;
+  }
+  .board.open { display: flex; }
+  .only-narrow { display: inline-block; }
+}
+</style>
+<!-- ===================== CONFIGURAÇÃO DO FIREBASE =====================
+     Troque o bloco abaixo pelo firebaseConfig do seu projeto (passo 3 do LEIAME).
+     ==================================================================== -->
+<script>
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyByo0qNstJfIZUW0wCP7zW462p0fDDtD2w",
+  authDomain: "doutor-vs-sarampo.firebaseapp.com",
+  projectId: "doutor-vs-sarampo",
+  storageBucket: "doutor-vs-sarampo.firebasestorage.app",
+  messagingSenderId: "838102277369",
+  appId: "1:838102277369:web:c8cff086c6cf341c101628"
+};
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>body{margin:0;font-size:14px}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}</style>
+</head>
+<body>
+<div class="cabinet" id="cabinet">
+  <canvas id="game" aria-label="Jogo Doutor vs Sarampo"></canvas>
+  <div class="toolbar">
+    <button id="btnVisual" type="button" aria-label="Trocar visual entre pixel e 3D">PIXEL</button>
+    <button id="btnSound" type="button" aria-label="Ligar ou desligar som">SOM ON</button>
+    <button id="btnPause" type="button" aria-label="Pausar">II</button>
+  </div>
+
+  <div class="overlay" id="menu">
+    <h1><span class="green">DOUTOR</span><span class="vs">vs</span><span class="red">SARAMPO</span></h1>
+    <p>Destrua os vírus com remédio antes que eles cheguem à cidade.</p>
+    <form class="player" id="playerForm" novalidate>
+      <label for="fNome"><span class="small-label">NOME</span>
+        <input id="fNome" name="nome" maxlength="40" autocomplete="off" placeholder="Seu nome">
+      </label>
+      <div class="row">
+        <label for="fRa"><span class="small-label">RA</span>
+          <input id="fRa" name="ra" maxlength="20" autocomplete="off" inputmode="numeric" placeholder="Ex.: 202512">
+        </label>
+        <label for="fTurma"><span class="small-label">TURMA</span>
+          <select id="fTurma" name="turma"><option value="">Escolha…</option></select>
+        </label>
+      </div>
+      <datalist id="turmasList"></datalist>
+      <p class="form-error" id="formError" role="alert"></p>
+    </form>
+    <div class="seg" role="group" aria-label="Escolha o visual">
+      <span class="small-label">VISUAL</span>
+      <button type="button" data-visual="pixel" aria-pressed="true">PIXEL</button>
+      <button type="button" data-visual="3d" aria-pressed="false">3D</button>
+    </div>
+    <button class="start" id="btnStart" type="submit" form="playerForm">JOGAR</button>
+    <div class="legend">
+      <span>💊 remédio</span><span>💉 vacina = escudo</span><span>⭐ tiro triplo</span>
+    </div>
+    <div class="keys">
+      <kbd>←</kbd><kbd>→</kbd> mover <kbd>ESPAÇO</kbd> atirar <kbd>P</kbd> pausa<br>
+      No celular: arraste o dedo, o doutor atira sozinho
+    </div>
+    <div class="big" id="menuRecord"></div>
+    <button class="ghost only-narrow" type="button" data-open-board>VER RANKING</button>
+  </div>
+
+  <div class="overlay" id="pauseScreen" hidden>
+    <h1><span class="green">PAUSA</span></h1>
+    <button class="start" id="btnResume" type="button">CONTINUAR</button>
+  </div>
+
+  <div class="overlay" id="overScreen" hidden>
+    <h1><span class="red">A CIDADE<br>FOI INFECTADA</span></h1>
+    <div class="big" id="finalScore"></div>
+    <div class="save-status" id="saveStatus"></div>
+    <p class="fact" id="fact"></p>
+    <button class="start" id="btnAgain" type="button">JOGAR DE NOVO</button>
+    <div class="btn-row">
+      <button class="ghost" id="btnSwitch" type="button">TROCAR JOGADOR</button>
+      <button class="ghost only-narrow" type="button" data-open-board>VER RANKING</button>
+    </div>
+  </div>
+</div>
+
+<aside class="board" id="board" aria-label="Ranking">
+  <div class="board-head">
+    <h2>RANKING</h2>
+    <span class="live" id="liveStatus">conectando…</span>
+    <button class="ghost only-narrow" type="button" id="btnCloseBoard">FECHAR</button>
+  </div>
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" id="tabInd" aria-selected="true">INDIVIDUAL</button>
+    <button type="button" role="tab" id="tabTurma" aria-selected="false">POR TURMA</button>
+  </div>
+  <div class="filter" id="filterRow">
+    <label for="fFiltro">Turma:</label>
+    <select id="fFiltro"><option value="">Todas</option></select>
+  </div>
+  <div class="table-wrap" id="tableWrap"></div>
+  <p class="board-note" id="boardNote"></p>
+</aside>
+
+<script>
+(() => {
+  const W = 480, H = 720;
+  const $ = id => document.getElementById(id);
+  const canvas = $('game');
+  const ctx = canvas.getContext('2d');
+  const C = {
+    screen: '#0d2329', grid: '#14353d', mint: '#5ef2c0', virus: '#ff4d5e', virusDark: '#b8283a',
+    spot: '#ffb3c1', gold: '#ffd166', ink: '#e8fbf5', muted: '#8fb8ad', skin: '#f2c49b',
+    coat: '#f4f7f6', coatShade: '#c7d3d0', blue: '#4ea8ff', dark: '#2b2b38'
+  };
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = n => Number(n || 0).toLocaleString('pt-BR');
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // =========================================================
+  // RANKING COMPARTILHADO
+  // =========================================================
+  let db = null, me = null, canAdmin = false;
+  let players = [];           // [{id, nome, ra, turma, melhor, fase, partidas, atualizado}]
+  let dbMode = 'loading';     // loading | live | slow | local | error
+  let tab = 'ind';
+  let profile = null;         // {id, nome, ra, turma}
+  const LOCAL_KEY = 'dvs-ranking-local';
+  const MIN_ALUNOS = 8; // mínimo de alunos para a turma concorrer
+
+  const loadLocal = () => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]'); } catch (e) { return []; } };
+  const saveLocal = list => { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); } catch (e) {} };
+
+  const normTurma = t => t.trim().toUpperCase().replace(/\s+/g, ' ');
+  const raId = ra => ra.trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+
+  function connect() {
+    const timer = setTimeout(() => { if (dbMode === 'loading') { dbMode = 'slow'; renderBoard(); } }, 10000);
+    const cfg = window.FIREBASE_CONFIG || {};
+    const goLocal = () => { clearTimeout(timer); db = null; dbMode = 'local'; players = loadLocal(); renderBoard(); };
+    if (!window.firebase || !cfg.apiKey || /COLE/.test(cfg.apiKey)) { goLocal(); return; }
+    try { firebase.initializeApp(cfg); db = firebase.firestore(); } catch (e) { goLocal(); return; }
+    db.collection('jogadores').orderBy('melhor', 'desc').limit(1000).onSnapshot({ includeMetadataChanges: true }, snap => {
+      players = snap.docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
+      if (!snap.metadata.fromCache) { clearTimeout(timer); dbMode = 'live'; }
+      renderBoard();
+    }, () => { clearTimeout(timer); dbMode = 'error'; renderBoard(); });
+  }
+
+  function sortedPlayers() {
+    return players.slice().sort((a, b) => (b.melhor || 0) - (a.melhor || 0) || String(a.atualizado || '').localeCompare(String(b.atualizado || '')));
+  }
+
+  function turmaStats() {
+    const map = new Map();
+    players.forEach(p => {
+      const t = p.turma || '—';
+      if (!map.has(t)) map.set(t, { turma: t, total: 0, jogadores: 0, top: null });
+      const s = map.get(t);
+      s.total += p.melhor || 0; s.jogadores++;
+      if (!s.top || (p.melhor || 0) > (s.top.melhor || 0)) s.top = p;
+    });
+    return [...map.values()].map(s => Object.assign(s, { media: Math.round(s.total / s.jogadores) }))
+      .map(s => Object.assign(s, { valida: s.jogadores >= MIN_ALUNOS }))
+      .sort((a, b) => (b.valida - a.valida) || b.media - a.media || b.jogadores - a.jogadores);
+  }
+
+  async function saveScore(score, level) {
+    const p = profile;
+    const apply = old => {
+      const melhorAntigo = old ? (old.melhor || 0) : 0;
+      const novo = score > melhorAntigo;
+      return {
+        novo,
+        body: {
+          nome: p.nome, ra: p.ra, turma: p.turma,
+          melhor: Math.max(melhorAntigo, score),
+          fase: novo ? level : (old ? old.fase || level : level),
+          partidas: (old ? old.partidas || 0 : 0) + 1,
+          atualizado: new Date().toISOString()
+        }
+      };
+    };
+    if (!db) {
+      const list = loadLocal();
+      const i = list.findIndex(x => x.id === p.id);
+      const r = apply(i >= 0 ? list[i] : null);
+      const row = Object.assign({ id: p.id }, r.body);
+      if (i >= 0) list[i] = row; else list.push(row);
+      saveLocal(list); players = list; renderBoard();
+      return { ok: true, novo: r.novo, melhor: r.body.melhor };
+    }
+    const ref = db.collection('jogadores').doc(p.id);
+    const attempt = async () => {
+      const snap = await ref.get();
+      const r = apply(snap.exists ? snap.data() : null);
+      await ref.set(r.body);
+      return { ok: true, novo: r.novo, melhor: r.body.melhor };
+    };
+    try { return await attempt(); }
+    catch (e) {
+      if (e && e.code === 'unavailable') {
+        await new Promise(res => setTimeout(res, 600 + Math.random() * 800));
+        try { return await attempt(); } catch (e2) { e = e2; }
+      }
+      return { ok: false, code: e && e.code };
+    }
+  }
+
+  function positionOf(id) {
+    const i = sortedPlayers().findIndex(p => p.id === id);
+    return i >= 0 ? i + 1 : null;
+  }
+
+  // ---------- Render do placar ----------
+  const tableWrap = $('tableWrap'), filtro = $('fFiltro');
+  function renderBoard() {
+    const live = $('liveStatus');
+    live.className = 'live' + (dbMode === 'live' ? ' on' : (dbMode === 'error' || dbMode === 'slow') ? ' off' : '');
+    live.textContent = { loading: 'conectando…', live: 'ao vivo', slow: 'sem conexão ainda', local: 'só neste aparelho', error: 'desconectado' }[dbMode];
+
+    // turmas no filtro e no autocompletar
+    const turmas = [...new Set(players.map(p => p.turma).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+    const cur = filtro.value;
+    filtro.innerHTML = '<option value="">Todas</option>' + turmas.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    filtro.value = turmas.includes(cur) ? cur : '';
+    $('turmasList').innerHTML = turmas.map(t => `<option value="${esc(t)}"></option>`).join('');
+
+    $('filterRow').hidden = tab !== 'ind';
+    $('tabInd').setAttribute('aria-selected', tab === 'ind');
+    $('tabTurma').setAttribute('aria-selected', tab === 'turma');
+
+    if (!players.length) {
+      tableWrap.innerHTML = `<div class="empty">${dbMode === 'loading' ? 'Carregando ranking…' : 'Ninguém jogou ainda.<br>Coloque nome, RA e turma e seja o primeiro do ranking.'}</div>`;
+    } else if (tab === 'ind') {
+      const list = sortedPlayers().map((p, i) => Object.assign({ pos: i + 1 }, p)).filter(p => !filtro.value || p.turma === filtro.value);
+      tableWrap.innerHTML = `<table><thead><tr><th>#</th><th>JOGADOR</th><th class="num">PONTOS</th></tr></thead><tbody>` +
+        list.map(p => `<tr class="${p.pos <= 3 ? 'top' + p.pos : ''} ${profile && p.id === profile.id ? 'me' : ''}">
+          <td class="pos">${p.pos}</td>
+          <td class="name">${esc(p.nome)}<span class="sub">${esc(p.turma)} · RA ${esc(p.ra)}</span></td>
+          <td class="num">${fmt(p.melhor)}<span class="sub">fase ${esc(p.fase || 1)} · ${esc(p.partidas || 1)}x</span>${canAdmin && db ? `<button type="button" class="del" data-del="${esc(p.id)}" aria-label="Remover ${esc(p.nome)}">×</button>` : ''}</td>
+        </tr>`).join('') + `</tbody></table>`;
+    } else {
+      const list = turmaStats();
+      tableWrap.innerHTML = `<table><thead><tr><th>#</th><th>TURMA</th><th class="num">MÉDIA</th><th class="num">ALUNOS</th></tr></thead><tbody>` +
+        list.map((t, i) => `<tr class="${t.valida && i < 3 ? 'top' + (i + 1) : ''} ${profile && t.turma === profile.turma ? 'me' : ''}">
+          <td class="pos">${t.valida ? i + 1 : '—'}</td>
+          <td class="name"><span class="${t.valida ? '' : 'red'}">${esc(t.turma)}</span>${t.valida ? '' : `<span class="sub red">faltam ${MIN_ALUNOS - t.jogadores} aluno${MIN_ALUNOS - t.jogadores > 1 ? 's' : ''} para concorrer</span>`}<span class="sub">soma ${fmt(t.total)} · destaque: ${esc(t.top ? t.top.nome : '')}</span></td>
+          <td class="num">${fmt(t.media)}</td>
+          <td class="num">${t.jogadores}</td>
+        </tr>`).join('') + `</tbody></table>`;
+    }
+
+    $('boardNote').textContent = tab === 'turma'
+      ? 'Média = soma dos recordes dos alunos da turma ÷ número de alunos que jogaram. Só concorre a turma com pelo menos ' + MIN_ALUNOS + ' alunos; as que têm menos aparecem em vermelho no fim da lista.'
+      : dbMode === 'local' ? 'Ranking online desligado (falta configurar o Firebase); as partidas ficam salvas só neste aparelho.'
+      : 'Vale o melhor resultado de cada RA.';
+
+    const top = sortedPlayers()[0];
+    $('menuRecord').textContent = top ? `RECORDE: ${fmt(top.melhor)} · ${top.nome} (${top.turma})` : '';
+  }
+
+  $('tabInd').addEventListener('click', () => { tab = 'ind'; renderBoard(); });
+  $('tabTurma').addEventListener('click', () => { tab = 'turma'; renderBoard(); });
+  filtro.addEventListener('change', renderBoard);
+  tableWrap.addEventListener('click', async e => {
+    const b = e.target.closest('[data-del]');
+    if (!b || !db) return;
+    if (!b.classList.contains('confirm')) {
+      b.classList.add('confirm'); b.textContent = 'remover?';
+      setTimeout(() => { if (b.isConnected) { b.classList.remove('confirm'); b.textContent = '×'; } }, 3000);
+      return;
+    }
+    b.disabled = true;
+    try { await db.collection('jogadores').doc(b.dataset.del).delete(); } catch (err) { b.disabled = false; }
+  });
+  const board = $('board');
+  document.querySelectorAll('[data-open-board]').forEach(b => b.addEventListener('click', () => { board.classList.add('open'); renderBoard(); }));
+  $('btnCloseBoard').addEventListener('click', () => board.classList.remove('open'));
+
+  connect();
+  renderBoard();
+
+  // ---------- Formulário do jogador ----------
+  const fNome = $('fNome'), fRa = $('fRa'), fTurma = $('fTurma');
+  const TURMAS = [['1º ano', 'ABCDEFGHI'], ['2º ano', 'ABCDEF'], ['3º ano', 'ABCD'], ['4º ano', 'ABC'], ['5º ano', 'ABC']];
+  fTurma.innerHTML = '<option value="">Escolha…</option>' +
+    TURMAS.map(([ano, letras]) => `<optgroup label="${ano}">` + [...letras].map(l => `<option value="${ano[0]}º ${l}">${ano[0]}º ${l}</option>`).join('') + '</optgroup>').join('') +
+    '<optgroup label="Equipe"><option value="PROFESSORES">Professores</option></optgroup>';
+  try {
+    const saved = JSON.parse(localStorage.getItem('dvs-jogador') || 'null');
+    if (saved) { fNome.value = saved.nome || ''; fRa.value = saved.ra || ''; fTurma.value = saved.turma || ''; }
+  } catch (e) {}
+
+  $('playerForm').addEventListener('submit', e => {
+    e.preventDefault();
+    [fNome, fRa, fTurma].forEach(i => i.removeAttribute('aria-invalid'));
+    const nome = fNome.value.trim().replace(/\s+/g, ' ');
+    const ra = fRa.value.trim();
+    const turma = normTurma(fTurma.value);
+    let erro = '';
+    if (!nome) { erro = 'Escreva seu nome.'; fNome.setAttribute('aria-invalid', 'true'); }
+    else if (!raId(ra)) { erro = 'Escreva seu RA (só letras e números).'; fRa.setAttribute('aria-invalid', 'true'); }
+    else if (!turma) { erro = 'Escolha sua turma.'; fTurma.setAttribute('aria-invalid', 'true'); }
+    $('formError').textContent = erro;
+    if (erro) return;
+    profile = { id: raId(ra), nome, ra, turma };
+    try { localStorage.setItem('dvs-jogador', JSON.stringify({ nome, ra, turma })); } catch (err) {}
+    start();
+  });
+
+  // =========================================================
+  // JOGO
+  // =========================================================
+  let audio = null, soundOn = true;
+  function beep(freq, dur, type = 'square', vol = 0.06, slide = 0) {
+    if (!soundOn || !audio) return;
+    const t = audio.currentTime;
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur);
+  }
+  const sfx = {
+    shoot: () => beep(880, 0.06, 'square', 0.03, -400),
+    hit: () => beep(220, 0.08, 'triangle', 0.08, -120),
+    pop: () => { beep(520, 0.12, 'square', 0.06, 600); beep(160, 0.15, 'sawtooth', 0.04, -100); },
+    hurt: () => beep(140, 0.4, 'sawtooth', 0.1, -100),
+    power: () => { beep(660, 0.08); setTimeout(() => beep(990, 0.12), 80); },
+    level: () => { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.1, 'square', 0.05), i * 90)); }
+  };
+  const btnSound = $('btnSound');
+  btnSound.addEventListener('click', () => { soundOn = !soundOn; btnSound.textContent = soundOn ? 'SOM ON' : 'SOM OFF'; btnSound.blur(); });
+
+  const DOC = [
+    "...cccccc...", "..ccc++ccc..", "..cccccccc..", "..hssssssh..", "..skssssks..", "..ssssssss..",
+    "..mmmmmmmm..", "...mmmmmm...", ".wwwwbbwwww.", "wwwwbwwbwwww", "wwwwbwwbwwww", "sgwwwbbwwwgs",
+    ".gwwwwwwwwg.", "..wwwwwwww..", "..dd....dd..", "..dd....dd.."
+  ];
+  const DOC_COL = { c: C.mint, '+': '#ffffff', h: '#5a3a24', s: C.skin, k: C.dark, m: '#9fd8ff', w: C.coat, b: C.blue, g: C.coatShade, d: '#3b4a66' };
+  const PX = 4;
+  const docSprite = document.createElement('canvas');
+  docSprite.width = 12 * PX; docSprite.height = DOC.length * PX;
+  (() => {
+    const g = docSprite.getContext('2d');
+    DOC.forEach((row, y) => [...row].forEach((ch, x) => { if (DOC_COL[ch]) { g.fillStyle = DOC_COL[ch]; g.fillRect(x * PX, y * PX, PX, PX); } }));
+  })();
+
+  // ---------- Visual 3D (sprites pré-renderizados com luz e sombra) ----------
+  const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; };
+  function sph(g, x, y, r, l, m, d) {
+    const s = g.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.05, x, y, r * 1.05);
+    s.addColorStop(0, l); s.addColorStop(0.45, m); s.addColorStop(1, d);
+    g.fillStyle = s; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  function lin(g, x0, x1, stops) { const l = g.createLinearGradient(x0, 0, x1, 0); stops.forEach((c, i) => l.addColorStop(i / (stops.length - 1), c)); return l; }
+
+  const [bg3d, gb] = mk(W, H);
+  (() => {
+    const bg = gb.createRadialGradient(W / 2, H * 0.35, 40, W / 2, H * 0.5, H * 0.8);
+    bg.addColorStop(0, '#1e4a55'); bg.addColorStop(1, '#050d10');
+    gb.fillStyle = bg; gb.fillRect(0, 0, W, H);
+    let seed = 7; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 30; i++) {
+      const x = r() * W, y = r() * H * 0.85, rad = 8 + r() * 34;
+      const b = gb.createRadialGradient(x, y, 0, x, y, rad);
+      b.addColorStop(0, 'rgba(120,240,210,0.16)'); b.addColorStop(1, 'rgba(120,240,210,0)');
+      gb.fillStyle = b; gb.beginPath(); gb.arc(x, y, rad, 0, Math.PI * 2); gb.fill();
+    }
+    const fl = gb.createLinearGradient(0, H - 120, 0, H);
+    fl.addColorStop(0, 'rgba(3,8,10,0)'); fl.addColorStop(1, 'rgba(3,8,10,0.85)');
+    gb.fillStyle = fl; gb.fillRect(0, H - 120, W, 120);
+  })();
+
+  const [virus3d, gv] = mk(320, 320);
+  (() => {
+    const g = gv, cx = 160, cy = 160, R = 100;
+    for (let i = 0; i < 14; i++) {
+      const a = i / 14 * Math.PI * 2 + 0.2;
+      const x1 = cx + Math.cos(a) * R * 0.9, y1 = cy + Math.sin(a) * R * 0.9, x2 = cx + Math.cos(a) * R * 1.38, y2 = cy + Math.sin(a) * R * 1.38;
+      const lg = g.createLinearGradient(x1, y1, x2, y2); lg.addColorStop(0, '#5c0d1a'); lg.addColorStop(1, '#c2283f');
+      g.strokeStyle = lg; g.lineWidth = R * 0.1; g.lineCap = 'round'; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+      sph(g, x2, y2, R * 0.12, '#ffd0d8', '#ff4d5e', '#6e0f1f');
+    }
+    sph(g, cx, cy, R, '#ffc2cb', '#e8334b', '#3d0610');
+    for (let i = 0; i < 7; i++) { const a = i * 2.3, d = R * (0.25 + 0.4 * ((i * 37) % 10) / 10); sph(g, cx + Math.cos(a) * d, cy + Math.sin(a) * d, R * 0.11, '#ffe3e8', '#ff9aae', '#a3263c'); }
+    const rim = g.createRadialGradient(cx + R * 0.6, cy + R * 0.5, R * 0.6, cx, cy, R * 1.05);
+    rim.addColorStop(0, 'rgba(94,242,192,0)'); rim.addColorStop(0.85, 'rgba(94,242,192,0)'); rim.addColorStop(1, 'rgba(94,242,192,0.45)');
+    g.fillStyle = rim; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fill();
+  })();
+
+  const [pill3d, gpl] = mk(100, 100);
+  (() => {
+    const g = gpl; g.translate(50, 50);
+    const gl = g.createRadialGradient(0, 0, 0, 0, 0, 50); gl.addColorStop(0, 'rgba(78,168,255,0.45)'); gl.addColorStop(1, 'rgba(78,168,255,0)');
+    g.fillStyle = gl; g.beginPath(); g.arc(0, 0, 50, 0, Math.PI * 2); g.fill();
+    g.fillStyle = lin(g, -14, 14, ['#1d5fa8', '#8cc8ff', '#163f73']); g.beginPath(); g.roundRect(-14, -30, 28, 30, [14, 14, 0, 0]); g.fill();
+    g.fillStyle = lin(g, -14, 14, ['#9aa8ad', '#ffffff', '#7d8a8f']); g.beginPath(); g.roundRect(-14, 0, 28, 30, [0, 0, 14, 14]); g.fill();
+  })();
+
+  const [doc3d, gd] = mk(290, 360);
+  (() => {
+    const g = gd, cx = 320; g.translate(-175, -378);
+    g.fillStyle = lin(g, cx - 60, cx + 60, ['#1b2438', '#4a5c80', '#141b2b']); g.beginPath(); g.roundRect(cx - 52, 650, 40, 80, 10); g.roundRect(cx + 12, 650, 40, 80, 10); g.fill();
+    g.fillStyle = lin(g, cx - 110, cx + 110, ['#8e9ea3', '#ffffff', '#dfe7e9', '#6e7d82']);
+    g.beginPath(); g.moveTo(cx - 70, 560); g.quadraticCurveTo(cx - 112, 580, cx - 104, 700); g.lineTo(cx + 104, 700); g.quadraticCurveTo(cx + 112, 580, cx + 70, 560); g.closePath(); g.fill();
+    [-1, 1].forEach(s => { g.save(); g.translate(cx + s * 96, 600); g.rotate(s * -0.25); g.fillStyle = lin(g, -20, 20, ['#9aa9ae', '#ffffff', '#7f8e93']); g.beginPath(); g.roundRect(-20, -10, 40, 100, 18); g.fill(); sph(g, 0, 98, 17, '#ffe2c8', '#e9b48a', '#8c5a3a'); g.restore(); });
+    g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, 580); g.lineTo(cx, 700); g.stroke();
+    g.strokeStyle = '#2e7fd6'; g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx - 34, 560); g.quadraticCurveTo(cx - 40, 630, cx, 640); g.quadraticCurveTo(cx + 40, 630, cx + 34, 560); g.stroke();
+    sph(g, cx, 648, 14, '#e6f2ff', '#9fb4c8', '#3b4d5e');
+    const nk = g.createLinearGradient(0, 540, 0, 570); nk.addColorStop(0, '#a8754f'); nk.addColorStop(1, '#e2ac83'); g.fillStyle = nk; g.fillRect(cx - 22, 535, 44, 30);
+    sph(g, cx, 480, 70, '#ffe6cf', '#eab68c', '#8a5636');
+    g.fillStyle = lin(g, cx - 70, cx + 70, ['#5d9cc4', '#d6efff', '#4a7fa3']);
+    g.beginPath(); g.moveTo(cx - 66, 488); g.quadraticCurveTo(cx, 470, cx + 66, 488); g.quadraticCurveTo(cx + 58, 548, cx, 552); g.quadraticCurveTo(cx - 58, 548, cx - 66, 488); g.fill();
+    g.strokeStyle = 'rgba(40,80,110,0.35)'; g.lineWidth = 2; [505, 520, 535].forEach(y => { g.beginPath(); g.moveTo(cx - 50, y); g.quadraticCurveTo(cx, y - 6, cx + 50, y); g.stroke(); });
+    [-1, 1].forEach(s => { sph(g, cx + s * 26, 462, 13, '#ffffff', '#e9eef0', '#9aa5a9'); sph(g, cx + s * 26 + 3, 463, 7, '#5b4a3a', '#2a1d14', '#0b0705'); g.fillStyle = '#fff'; g.beginPath(); g.arc(cx + s * 26, 459, 2.5, 0, Math.PI * 2); g.fill(); });
+    g.fillStyle = lin(g, cx - 80, cx + 80, ['#1d8e6c', '#8cffd9', '#137055']);
+    g.beginPath(); g.moveTo(cx - 74, 450); g.quadraticCurveTo(cx - 80, 388, cx, 384); g.quadraticCurveTo(cx + 80, 388, cx + 74, 450); g.quadraticCurveTo(cx, 432, cx - 74, 450); g.fill();
+    g.fillStyle = '#ffffff'; g.fillRect(cx - 5, 398, 10, 30); g.fillRect(cx - 15, 408, 30, 10);
+  })();
+
+  let visual = 'pixel';
+  try { if (localStorage.getItem('dvs-visual') === '3d') visual = '3d'; } catch (e) {}
+  function setVisual(v) {
+    visual = v;
+    try { localStorage.setItem('dvs-visual', v); } catch (e) {}
+    document.querySelectorAll('[data-visual]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.visual === v)));
+    $('btnVisual').textContent = v === '3d' ? '3D' : 'PIXEL';
+  }
+  document.querySelectorAll('[data-visual]').forEach(b => b.addEventListener('click', () => setVisual(b.dataset.visual)));
+  $('btnVisual').addEventListener('click', e => { setVisual(visual === '3d' ? 'pixel' : '3d'); e.currentTarget.blur(); });
+  setVisual(visual);
+
+  let state = 'menu';
+  let player, bullets, viruses, particles, powerups, floats;
+  let score, lives, level, kills, spawnT, shield, triple, inv, shake, levelBanner;
+  const keys = {};
+  const pointer = { active: false, x: W / 2 };
+  const stars = Array.from({ length: 40 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: Math.random() * 1.5 + 0.5, v: Math.random() * 20 + 10 }));
+
+  function reset() {
+    player = { x: W / 2, y: H - 80, w: docSprite.width, h: docSprite.height, speed: 340, cool: 0 };
+    bullets = []; viruses = []; particles = []; powerups = []; floats = [];
+    score = 0; lives = 3; level = 1; kills = 0; spawnT = 0.5;
+    shield = 0; triple = 0; inv = 0; shake = 0; levelBanner = 2;
+  }
+  reset();
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  function spawnVirus() {
+    const roll = Math.random();
+    let hp = 1;
+    if (level >= 2 && roll < 0.35) hp = 2;
+    if (level >= 4 && roll < 0.15) hp = 3;
+    const r = 14 + hp * 6 + rnd(-2, 3);
+    const x = rnd(r + 10, W - r - 10);
+    viruses.push({
+      x, baseX: x, y: -r - 10, r, hp, maxHp: hp,
+      vy: rnd(45, 75) + level * 11 - hp * 6,
+      wob: rnd(0, Math.PI * 2), wobAmp: rnd(10, 40), wobSpd: rnd(1, 2.4),
+      rot: rnd(0, Math.PI * 2), spin: rnd(-1.5, 1.5), flash: 0,
+      spots: Array.from({ length: 4 + hp }, () => ({ a: rnd(0, Math.PI * 2), d: rnd(0.2, 0.62), s: rnd(0.12, 0.22) }))
+    });
+  }
+  function shoot() {
+    const angles = triple > 0 ? [-0.22, 0, 0.22] : [0];
+    angles.forEach(a => bullets.push({ x: player.x, y: player.y - player.h / 2 + 4, vx: Math.sin(a) * 520, vy: -Math.cos(a) * 520 }));
+    player.cool = triple > 0 ? 0.16 : 0.2;
+    sfx.shoot();
+  }
+  function burst(x, y, color, n = 14, spd = 160) {
+    for (let i = 0; i < n; i++) {
+      const a = rnd(0, Math.PI * 2), v = rnd(spd * 0.3, spd);
+      particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.35, 0.7), max: 0.7, c: color, s: rnd(2, 5) });
+    }
+  }
+  const addFloat = (x, y, text, color) => floats.push({ x, y, text, color, life: 0.9 });
+
+  function hurt(reason) {
+    if (inv > 0) return;
+    if (shield > 0) { shield = 0; sfx.hit(); addFloat(player.x, player.y - 50, 'ESCUDO!', C.blue); inv = 0.8; return; }
+    lives--; inv = 1.6; shake = 0.4; sfx.hurt();
+    addFloat(player.x, player.y - 50, reason, C.virus);
+    burst(player.x, player.y, C.virus, 20, 200);
+    if (lives <= 0) gameOver();
+  }
+
+  const FACTS = [
+    'O sarampo é uma das doenças mais contagiosas que existem: até 9 em cada 10 pessoas não vacinadas que ficam perto de um doente pegam o vírus.',
+    'O vírus do sarampo passa pelo ar, na tosse, no espirro e até na fala, e pode continuar no ambiente por até 2 horas.',
+    'A vacina tríplice viral protege contra três doenças ao mesmo tempo: sarampo, caxumba e rubéola.',
+    'Com as duas doses da vacina, a proteção contra o sarampo chega a cerca de 97%.',
+    'Sintomas do sarampo: febre alta, tosse, nariz escorrendo, olhos vermelhos e manchas vermelhas pelo corpo.',
+    'No jogo, o remédio destrói o vírus. Na vida real não existe remédio que mate o vírus do sarampo: o tratamento só alivia os sintomas. A melhor arma é a vacina.'
+  ];
+  let factIdx = Math.floor(Math.random() * FACTS.length);
+
+  const menu = $('menu'), pauseScreen = $('pauseScreen'), overScreen = $('overScreen');
+
+  function start() {
+    if (!profile) { showMenu(); return; }
+    if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (audio && audio.state === 'suspended') audio.resume();
+    reset();
+    state = 'play';
+    menu.hidden = true; overScreen.hidden = true; pauseScreen.hidden = true;
+    if (document.activeElement) document.activeElement.blur();
+  }
+  function showMenu() {
+    state = 'menu';
+    overScreen.hidden = true; pauseScreen.hidden = true; menu.hidden = false;
+    setTimeout(() => fNome.focus(), 30);
+  }
+  async function gameOver() {
+    state = 'over';
+    const finalScore = score, finalLevel = level;
+    $('finalScore').textContent = `${profile.nome}: ${fmt(finalScore)} PONTOS · FASE ${finalLevel}`;
+    factIdx = (factIdx + 1) % FACTS.length;
+    $('fact').innerHTML = '<b>VOCÊ SABIA?</b>' + esc(FACTS[factIdx]);
+    const st = $('saveStatus');
+    st.className = 'save-status'; st.textContent = 'Salvando no ranking…';
+    $('btnAgain').disabled = true;
+    overScreen.hidden = false;
+    const r = await saveScore(finalScore, finalLevel);
+    $('btnAgain').disabled = false;
+    $('btnAgain').focus();
+    if (r.ok) {
+      const pos = positionOf(profile.id);
+      st.className = 'save-status ok';
+      st.textContent = (r.novo ? 'Novo recorde pessoal! ' : `Seu recorde continua ${fmt(r.melhor)}. `) + (pos ? `Você está em ${pos}º lugar.` : '');
+    } else {
+      st.className = 'save-status err';
+      st.textContent = 'Não deu para salvar. Confira a internet e tente de novo.';
+    }
+  }
+  function togglePause() {
+    if (state === 'play') { state = 'pause'; pauseScreen.hidden = false; }
+    else if (state === 'pause') { state = 'play'; pauseScreen.hidden = true; }
+  }
+
+  $('btnAgain').addEventListener('click', start);
+  $('btnSwitch').addEventListener('click', () => { profile = null; fNome.value = ''; fRa.value = ''; fTurma.value = ''; showMenu(); });
+  $('btnResume').addEventListener('click', togglePause);
+  $('btnPause').addEventListener('click', e => { e.currentTarget.blur(); togglePause(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') togglePause(); });
+
+  window.addEventListener('keydown', e => {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'SELECT') return;
+    const k = e.key.toLowerCase();
+    if (state === 'play' && [' ', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(k)) e.preventDefault();
+    keys[k] = true;
+    if (k === 'p' || (k === 'escape' && state !== 'menu')) togglePause();
+  });
+  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  const toGameX = clientX => { const r = canvas.getBoundingClientRect(); return (clientX - r.left) / r.width * W; };
+  canvas.addEventListener('pointerdown', e => { pointer.active = true; pointer.x = toGameX(e.clientX); try { canvas.setPointerCapture(e.pointerId); } catch (_) {} });
+  canvas.addEventListener('pointermove', e => { if (pointer.active) pointer.x = toGameX(e.clientX); });
+  const up = () => { pointer.active = false; };
+  canvas.addEventListener('pointerup', up);
+  canvas.addEventListener('pointercancel', up);
+
+  function update(dt) {
+    stars.forEach(s => { s.y += s.v * dt; if (s.y > H) { s.y = 0; s.x = Math.random() * W; } });
+    if (state !== 'play') return;
+
+    let dir = 0;
+    if (keys['arrowleft'] || keys['a']) dir -= 1;
+    if (keys['arrowright'] || keys['d']) dir += 1;
+    if (dir) { player.x += dir * player.speed * dt; pointer.active = false; }
+    else if (pointer.active) player.x += (pointer.x - player.x) * Math.min(1, dt * 14);
+    player.x = Math.max(player.w / 2 + 4, Math.min(W - player.w / 2 - 4, player.x));
+
+    player.cool -= dt;
+    if ((keys[' '] || keys['arrowup'] || keys['w'] || pointer.active) && player.cool <= 0) shoot();
+
+    shield = Math.max(0, shield - dt); triple = Math.max(0, triple - dt);
+    inv = Math.max(0, inv - dt); shake = Math.max(0, shake - dt); levelBanner = Math.max(0, levelBanner - dt);
+
+    spawnT -= dt;
+    if (spawnT <= 0) { spawnVirus(); spawnT = Math.max(0.32, 1.35 - level * 0.11) * rnd(0.7, 1.2); }
+
+    bullets.forEach(b => { b.x += b.vx * dt; b.y += b.vy * dt; });
+    bullets = bullets.filter(b => b.y > -20 && b.x > -20 && b.x < W + 20);
+
+    viruses.forEach(v => {
+      v.y += v.vy * dt; v.wob += v.wobSpd * dt; v.rot += v.spin * dt;
+      v.x = Math.max(v.r, Math.min(W - v.r, v.baseX + Math.sin(v.wob) * v.wobAmp));
+      v.flash = Math.max(0, v.flash - dt);
+    });
+
+    for (const b of bullets) {
+      for (const v of viruses) {
+        if (v.dead) continue;
+        const dx = b.x - v.x, dy = b.y - v.y;
+        if (dx * dx + dy * dy < (v.r + 6) * (v.r + 6)) {
+          b.dead = true; v.hp--; v.flash = 0.1;
+          burst(b.x, b.y, C.ink, 5, 90);
+          if (v.hp <= 0) {
+            v.dead = true;
+            const pts = 10 * v.maxHp * level;
+            score += pts; kills++;
+            addFloat(v.x, v.y, '+' + pts, C.gold);
+            burst(v.x, v.y, C.virus, 18, 220); burst(v.x, v.y, C.spot, 8, 140);
+            sfx.pop();
+            if (Math.random() < 0.09) powerups.push({ x: v.x, y: v.y, vy: 110, type: Math.random() < 0.5 ? 'vacina' : 'triplo', t: 0 });
+            if (kills % 15 === 0) { level++; levelBanner = 2; sfx.level(); }
+          } else sfx.hit();
+          break;
+        }
+      }
+    }
+
+    for (const v of viruses) {
+      if (v.dead || state !== 'play') continue;
+      const dx = Math.abs(v.x - player.x), dy = Math.abs(v.y - player.y);
+      if (dx < v.r + player.w / 2 - 8 && dy < v.r + player.h / 2 - 8) { v.dead = true; burst(v.x, v.y, C.virus, 16, 200); hurt('CONTAMINADO!'); }
+      else if (v.y - v.r > H - 24) { v.dead = true; hurt('O VÍRUS ESCAPOU!'); }
+    }
+    bullets = bullets.filter(b => !b.dead);
+    viruses = viruses.filter(v => !v.dead);
+
+    powerups.forEach(p => {
+      p.y += p.vy * dt; p.t += dt;
+      if (Math.abs(p.x - player.x) < player.w / 2 + 12 && Math.abs(p.y - player.y) < player.h / 2 + 12) {
+        p.dead = true; sfx.power();
+        if (p.type === 'vacina') { shield = 8; addFloat(player.x, player.y - 60, 'VACINADO!', C.blue); }
+        else { triple = 7; addFloat(player.x, player.y - 60, 'TIRO TRIPLO!', C.gold); }
+      }
+    });
+    powerups = powerups.filter(p => !p.dead && p.y < H + 30);
+
+    particles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96; p.life -= dt; });
+    particles = particles.filter(p => p.life > 0);
+    floats.forEach(f => { f.y -= 40 * dt; f.life -= dt; });
+    floats = floats.filter(f => f.life > 0);
+  }
+
+  function drawVirus(v) {
+    ctx.save();
+    ctx.translate(v.x, v.y); ctx.rotate(v.rot);
+    const spikes = 10, body = v.flash > 0 ? C.ink : C.virus;
+    ctx.strokeStyle = v.flash > 0 ? C.ink : C.virusDark; ctx.lineWidth = 3;
+    for (let i = 0; i < spikes; i++) {
+      const a = (i / spikes) * Math.PI * 2;
+      const x2 = Math.cos(a) * v.r * 1.32, y2 = Math.sin(a) * v.r * 1.32;
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * v.r * 0.85, Math.sin(a) * v.r * 0.85); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.fillStyle = body; ctx.beginPath(); ctx.arc(x2, y2, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = body; ctx.beginPath(); ctx.arc(0, 0, v.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = C.virusDark; ctx.globalAlpha = 0.35;
+    ctx.beginPath(); ctx.arc(v.r * 0.2, v.r * 0.25, v.r * 0.8, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = C.spot;
+    v.spots.forEach(s => { ctx.beginPath(); ctx.arc(Math.cos(s.a) * v.r * s.d, Math.sin(s.a) * v.r * s.d, v.r * s.s, 0, Math.PI * 2); ctx.fill(); });
+    ctx.restore();
+    ctx.fillStyle = C.dark;
+    const e = v.r * 0.32;
+    ctx.fillRect(v.x - e - 3, v.y - 4, 6, 6); ctx.fillRect(v.x + e - 3, v.y - 4, 6, 6);
+    ctx.fillRect(v.x - e - 4, v.y - 8, 8, 2); ctx.fillRect(v.x + e - 4, v.y - 8, 8, 2);
+    ctx.fillRect(v.x - v.r * 0.3, v.y + v.r * 0.35, v.r * 0.6, 3);
+    if (v.maxHp > 1) {
+      const bw = v.r * 1.6;
+      ctx.fillStyle = C.grid; ctx.fillRect(v.x - bw / 2, v.y - v.r - 16, bw, 4);
+      ctx.fillStyle = C.gold; ctx.fillRect(v.x - bw / 2, v.y - v.r - 16, bw * (v.hp / v.maxHp), 4);
+    }
+  }
+  function drawVirus3D(v) {
+    const s = v.r * 3.2;
+    ctx.save(); ctx.translate(v.x, v.y); ctx.rotate(Math.sin(v.rot) * 0.25);
+    ctx.drawImage(virus3d, -s / 2, -s / 2, s, s);
+    ctx.restore();
+    if (v.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.arc(v.x, v.y, v.r, 0, Math.PI * 2); ctx.fill(); }
+    const R = v.r;
+    ctx.fillStyle = '#14060a';
+    [-1, 1].forEach(sd => {
+      ctx.beginPath(); ctx.ellipse(v.x + sd * R * 0.33, v.y - R * 0.02, R * 0.11, R * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.translate(v.x + sd * R * 0.33, v.y - R * 0.22); ctx.rotate(-sd * 0.35); ctx.fillRect(-R * 0.15, -R * 0.03, R * 0.3, R * 0.06); ctx.restore();
+    });
+    ctx.strokeStyle = '#14060a'; ctx.lineWidth = Math.max(2, R * 0.06); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(v.x, v.y + R * 0.55, R * 0.28, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+    if (v.maxHp > 1) {
+      const bw = v.r * 1.6;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(v.x - bw / 2, v.y - v.r * 1.45 - 8, bw, 4);
+      ctx.fillStyle = C.gold; ctx.fillRect(v.x - bw / 2, v.y - v.r * 1.45 - 8, bw * (v.hp / v.maxHp), 4);
+    }
+  }
+  function drawPill3D(b) {
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(Math.atan2(b.vy, b.vx) + Math.PI / 2);
+    ctx.drawImage(pill3d, -17, -17, 34, 34);
+    ctx.restore();
+  }
+  function drawPill(b) {
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(Math.atan2(b.vy, b.vx) + Math.PI / 2);
+    ctx.fillStyle = C.blue; ctx.beginPath(); ctx.roundRect(-4, -9, 8, 9, [4, 4, 0, 0]); ctx.fill();
+    ctx.fillStyle = C.ink; ctx.beginPath(); ctx.roundRect(-4, 0, 8, 9, [0, 0, 4, 4]); ctx.fill();
+    ctx.restore();
+  }
+  function drawPower(p) {
+    ctx.save(); ctx.translate(p.x, p.y + Math.sin(p.t * 6) * 3);
+    ctx.strokeStyle = p.type === 'vacina' ? C.blue : C.gold; ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.5 + Math.sin(p.t * 8) * 0.3;
+    ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+    if (p.type === 'vacina') {
+      ctx.rotate(-0.7);
+      ctx.fillStyle = C.ink; ctx.fillRect(-4, -9, 8, 14);
+      ctx.fillStyle = C.blue; ctx.fillRect(-3, -3, 6, 7);
+      ctx.fillStyle = C.muted; ctx.fillRect(-6, -11, 12, 2); ctx.fillRect(-1, 5, 2, 8);
+    } else {
+      ctx.fillStyle = C.gold; ctx.beginPath();
+      for (let i = 0; i < 10; i++) { const r = i % 2 ? 4.5 : 10, a = i * Math.PI / 5 - Math.PI / 2; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawCross(x, y, s, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x - s / 6, y - s / 2, s / 3, s); ctx.fillRect(x - s / 2, y - s / 6, s, s / 3);
+  }
+  function text(t, x, y, size, color, align = 'left') {
+    ctx.font = size + 'px "Press Start 2P", monospace';
+    ctx.textAlign = align; ctx.textBaseline = 'top';
+    ctx.fillStyle = '#05100f'; ctx.fillText(t, x + 2, y + 2);
+    ctx.fillStyle = color; ctx.fillText(t, x, y);
+  }
+
+  function draw() {
+    ctx.save();
+    if (shake > 0) ctx.translate(rnd(-5, 5) * shake * 2, rnd(-5, 5) * shake * 2);
+    const is3d = visual === '3d';
+    ctx.imageSmoothingEnabled = is3d;
+    if (is3d) {
+      ctx.fillStyle = '#050d10'; ctx.fillRect(-10, -10, W + 20, H + 20);
+      ctx.drawImage(bg3d, 0, 0, W, H);
+      ctx.fillStyle = 'rgba(140,255,217,0.22)';
+      stars.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, s.s * 1.6, 0, Math.PI * 2); ctx.fill(); });
+    } else {
+      ctx.fillStyle = C.screen; ctx.fillRect(-10, -10, W + 20, H + 20);
+      ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
+      for (let x = 0; x <= W; x += 40) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); ctx.stroke(); }
+      for (let y = 0; y <= H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(143,184,173,0.35)';
+      stars.forEach(s => ctx.fillRect(s.x, s.y, s.s, s.s));
+    }
+
+    ctx.fillStyle = 'rgba(255,77,94,0.12)'; ctx.fillRect(0, H - 24, W, 24);
+    ctx.fillStyle = C.virus;
+    for (let x = 0; x < W; x += 16) ctx.fillRect(x, H - 24, 8, 2);
+    ctx.font = '8px "Press Start 2P", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 0.7;
+    ctx.fillText('ZONA DA CIDADE — NÃO DEIXE PASSAR', W / 2, H - 9); ctx.globalAlpha = 1;
+
+    powerups.forEach(drawPower);
+    viruses.forEach(is3d ? drawVirus3D : drawVirus);
+    bullets.forEach(is3d ? drawPill3D : drawPill);
+
+    if (state !== 'menu' && !(inv > 0 && Math.floor(inv * 12) % 2 === 0)) {
+      if (shield > 0) {
+        ctx.strokeStyle = C.blue; ctx.lineWidth = 3; ctx.globalAlpha = shield < 2 ? (Math.sin(shield * 20) + 1) / 2 : 0.8;
+        ctx.beginPath(); ctx.arc(player.x, player.y, 42, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 0.12; ctx.fillStyle = C.blue; ctx.fill(); ctx.globalAlpha = 1;
+      }
+      if (is3d) {
+        const sh = ctx.createRadialGradient(player.x, player.y + 32, 2, player.x, player.y + 32, 30);
+        sh.addColorStop(0, 'rgba(0,0,0,0.6)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = sh; ctx.beginPath(); ctx.ellipse(player.x, player.y + 32, 30, 7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.drawImage(doc3d, player.x - 26, player.y - 36, 52, 65);
+      } else {
+        ctx.drawImage(docSprite, Math.round(player.x - player.w / 2), Math.round(player.y - player.h / 2));
+      }
+    }
+
+    particles.forEach(p => { ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.fillStyle = p.c; ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s); });
+    ctx.globalAlpha = 1;
+    floats.forEach(f => { ctx.globalAlpha = Math.min(1, f.life * 2); text(f.text, f.x, f.y, 10, f.color, 'center'); });
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    if (state === 'menu') return;
+    text('PONTOS', 14, 14, 8, C.muted);
+    text(String(score).padStart(6, '0'), 14, 28, 14, C.gold);
+    text('FASE ' + level, 14, 50, 8, C.mint);
+    for (let i = 0; i < 3; i++) drawCross(W / 2 - 24 + i * 24, 26, 16, i < lives ? C.virus : C.grid);
+    if (profile) {
+      const nm = profile.nome.length > 14 ? profile.nome.slice(0, 13) + '…' : profile.nome;
+      text(nm.toUpperCase(), W - 14, 44, 8, C.ink, 'right');
+      text(profile.turma, W - 14, 58, 8, C.muted, 'right');
+    }
+    let y = 66;
+    if (shield > 0) { text('ESCUDO ' + Math.ceil(shield) + 's', 14, y, 8, C.blue); y += 14; }
+    if (triple > 0) text('TRIPLO ' + Math.ceil(triple) + 's', 14, y, 8, C.gold);
+    if (levelBanner > 0 && state === 'play') {
+      ctx.globalAlpha = Math.min(1, levelBanner);
+      text('FASE ' + level, W / 2, H / 2 - 40, 22, C.mint, 'center');
+      text(level === 1 ? 'PROTEJA A CIDADE!' : 'OS VÍRUS ESTÃO MAIS RÁPIDOS', W / 2, H / 2, 9, C.ink, 'center');
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    update(dt); draw();
+    requestAnimationFrame(loop);
+  }
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => requestAnimationFrame(loop));
+})();
+</script>
+
+</body>
+</html>
